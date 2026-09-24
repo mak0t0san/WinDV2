@@ -12,12 +12,14 @@ std::vector<FoundFile> FindFiles(const std::wstring& pattern)
 
 	WIN32_FIND_DATAW data{};
 	const HANDLE find = FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &data, FindExSearchNameMatch, nullptr, 0);
-	if (find == INVALID_HANDLE_VALUE)
+	if (find == INVALID_HANDLE_VALUE) {
 		return result;
+	}
 	do {
 		const std::wstring name = data.cFileName;
-		if (name == L"." || name == L"..")
+		if (name == L"." || name == L"..") {
 			continue;
+		}
 		result.push_back({name, directory + name, (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0});
 	} while (FindNextFileW(find, &data));
 	FindClose(find);

@@ -54,8 +54,9 @@ TEST_CASE("The last frame handed out survives a full queue")
 	REQUIRE(queue.Put(0, Bytes(4, 9)));
 	auto held = queue.Get();
 	REQUIRE(held.has_value());
-	for (std::uint8_t i = 0; i < 3; ++i)
+	for (std::uint8_t i = 0; i < 3; ++i) {
 		REQUIRE(queue.Put(0, Bytes(4, i)));
+	}
 	CHECK(queue.Load() == 3);
 	CHECK(held->data[0] == 9);
 }
@@ -150,8 +151,9 @@ TEST_CASE("Frames survive a producer/consumer stress run intact")
 	FrameQueue queue(8, 64);
 
 	std::thread producer([&] {
-		for (int i = 0; i < kFrames; ++i)
+		for (int i = 0; i < kFrames; ++i) {
 			queue.Put(i, Bytes(1 + i % 64, static_cast<std::uint8_t>(i)));
+		}
 		queue.Close();
 	});
 

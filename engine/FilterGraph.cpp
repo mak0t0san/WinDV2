@@ -17,6 +17,7 @@ CFilterGraph::CFilterGraph()
 
 CFilterGraph::~CFilterGraph()
 {
-	if (m_MC)
+	if (m_MC) {
 		m_MC->Stop();
+	}
 }

@@ -23,7 +23,7 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private const int MinHeight = 640;
 
     private readonly SettingsStore _settings;
-    private readonly DVEngine _engine;
+    private readonly DvEngine _engine;
     private readonly nint _hwnd;
     private int _modalCount;
     private bool _closing;
@@ -44,7 +44,7 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         RestoreWindowPlacement();
 
         _hwnd = WindowNative.GetWindowHandle(this);
-        _engine = DVEngine.Create(_hwnd, DispatcherQueue);
+        _engine = DvEngine.Create(_hwnd, DispatcherQueue);
         ViewModel.Attach(_engine);
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         ViewModel.CloseRequested += (_, _) => _ = ShutdownAndCloseAsync(saveSettings: true);
@@ -71,7 +71,7 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         UpdatePreview();
 
         string[] args = Environment.GetCommandLineArgs().Skip(1).ToArray();
-        ParsedCommandLine? commandLine = DVEngine.ParseCommandLine(args);
+        ParsedCommandLine? commandLine = DvEngine.ParseCommandLine(args);
         if (commandLine is null)
         {
             await ShowDialogAsync(new ContentDialog
@@ -93,16 +93,24 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         bool firstRun = _settings.IsFirstRun;
         await ViewModel.StartAsync(commandLine);
         if (commandLine.Mode != CommandLineMode.Interactive)
+        {
             return; // a scripted capture or record: no notices
+        }
+
         _ = ViewModel.CheckForUpdatesAsync();
         if (firstRun)
+        {
             await ShowAboutAsync();
+        }
     }
 
     private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
     {
         if (_readyToClose)
+        {
             return;
+        }
+
         args.Cancel = true;
         _ = ShutdownAndCloseAsync(saveSettings: true);
     }
@@ -112,11 +120,17 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private async Task ShutdownAndCloseAsync(bool saveSettings)
     {
         if (_closing)
+        {
             return;
+        }
+
         _closing = true;
 
         if (saveSettings)
+        {
             SaveWindowPlacement();
+        }
+
         await ViewModel.ShutdownAsync();
         ViewModel.Detach();
         if (saveSettings)
@@ -169,7 +183,10 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private void SaveWindowPlacement()
     {
         if (AppWindow.Presenter is OverlappedPresenter { State: not OverlappedPresenterState.Restored })
+        {
             return; // keep the last normal placement
+        }
+
         _settings.WindowX = AppWindow.Position.X;
         _settings.WindowY = AppWindow.Position.Y;
         _settings.WindowWidth = AppWindow.Size.Width;
@@ -187,7 +204,9 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         try
         {
             if (Directory.Exists(directory))
+            {
                 Environment.CurrentDirectory = directory;
+            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -201,7 +220,9 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(MainViewModel.HasPicture) or nameof(MainViewModel.SelectedTool))
+        {
             UpdatePreview();
+        }
     }
 
     // The preview is a native child window, so it is positioned by hand over
@@ -218,11 +239,11 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         double scale = Root.XamlRoot.RasterizationScale;
         var origin = PreviewHost.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0, 0));
         // Inset by the corner radius so the square window doesn't poke out.
-        const double inset = 2;
-        int x = (int)Math.Round((origin.X + inset) * scale);
-        int y = (int)Math.Round((origin.Y + inset) * scale);
-        int w = (int)Math.Round((PreviewHost.ActualWidth - 2 * inset) * scale);
-        int h = (int)Math.Round((PreviewHost.ActualHeight - 2 * inset) * scale);
+        const double Inset = 2;
+        int x = (int)Math.Round((origin.X + Inset) * scale);
+        int y = (int)Math.Round((origin.Y + Inset) * scale);
+        int w = (int)Math.Round((PreviewHost.ActualWidth - 2 * Inset) * scale);
+        int h = (int)Math.Round((PreviewHost.ActualHeight - 2 * Inset) * scale);
         _engine.MovePreview(x, y, w, h);
     }
 
@@ -252,13 +273,17 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private void CaptureDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CaptureDeviceBox.SelectedItem is string device && device != ViewModel.CaptureDevice)
+        {
             ViewModel.CaptureDevice = device;
+        }
     }
 
     private void RecordDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (RecordDeviceBox.SelectedItem is string device && device != ViewModel.RecordDevice)
+        {
             ViewModel.RecordDevice = device;
+        }
     }
 
     private async void BrowseCapture_Click(object sender, RoutedEventArgs e)
@@ -271,11 +296,14 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
 
         StorageFile? file = await picker.PickSaveFileAsync();
         if (file is null)
+        {
             return;
+        }
+
         // The picker creates an empty placeholder file; captures get their own names.
         await DeletePlaceholderAsync(file);
         TrySetWorkingDirectory(Path.GetDirectoryName(file.Path) ?? ".");
-        ViewModel.CaptureFile = DVEngine.CaptureBase(file.Path);
+        ViewModel.CaptureFile = DvEngine.CaptureBase(file.Path);
     }
 
     private static async Task DeletePlaceholderAsync(StorageFile file)
@@ -284,7 +312,9 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         {
             var properties = await file.GetBasicPropertiesAsync();
             if (properties.Size == 0)
+            {
                 await file.DeleteAsync();
+            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -300,7 +330,10 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
 
         IReadOnlyList<StorageFile> files = await picker.PickMultipleFilesAsync();
         if (files.Count == 0)
+        {
             return;
+        }
+
         TrySetWorkingDirectory(Path.GetDirectoryName(files[0].Path) ?? ".");
         ViewModel.RecordFiles = string.Join(" | ", files.Select(f => f.Path));
     }
@@ -317,17 +350,23 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private async void Files_Drop(object sender, DragEventArgs e)
     {
         if (!e.DataView.Contains(StandardDataFormats.StorageItems))
+        {
             return;
+        }
+
         var paths = (await e.DataView.GetStorageItemsAsync()).Select(i => i.Path).Where(p => p.Length > 0).ToList();
         if (paths.Count == 0)
+        {
             return;
+        }
+
         if (ViewModel.IsCaptureTool)
         {
             string path = paths[0];
             // A dropped folder means "capture into this folder".
             ViewModel.CaptureFile = Directory.Exists(path)
                 ? Path.Combine(path, "capture")
-                : DVEngine.CaptureBase(path);
+                : DvEngine.CaptureBase(path);
         }
         else
         {
@@ -340,7 +379,9 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private void UpdateBar_Closed(InfoBar sender, InfoBarClosedEventArgs args)
     {
         if (args.Reason == InfoBarCloseReason.CloseButton)
+        {
             ViewModel.DismissUpdate();
+        }
     }
 
     // ------------------------------------------------------------------ Settings and About
@@ -354,7 +395,10 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private void SettingsPanel_Closed(object? sender, SettingsClosedEventArgs e)
     {
         if (e.Saved)
+        {
             ViewModel.ApplySettings();
+        }
+
         SetSettingsVisible(false);
     }
 

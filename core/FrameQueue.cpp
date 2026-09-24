@@ -17,13 +17,15 @@ FrameQueue::FrameQueue(std::size_t capacity, std::size_t frameSize)
 
 bool FrameQueue::Put(std::int64_t duration, std::span<const std::uint8_t> data)
 {
-	if (data.size() > m_frameSize)
+	if (data.size() > m_frameSize) {
 		throw std::length_error("DV frame is larger than the queue slot");
+	}
 
 	std::unique_lock lock(m_mutex);
 	m_notFull.wait(lock, [this] { return m_closed.load() || m_load.load() < m_capacity; });
-	if (m_closed.load())
+	if (m_closed.load()) {
 		return false;
+	}
 
 	m_slots[m_tail] = {duration, data.size()};
 	std::copy(data.begin(), data.end(), SlotData(m_tail));
@@ -38,8 +40,9 @@ std::optional<FrameQueue::Frame> FrameQueue::Get()
 {
 	std::unique_lock lock(m_mutex);
 	m_notEmpty.wait(lock, [this] { return m_closed.load() || m_load.load() > 0; });
-	if (m_load.load() == 0)
+	if (m_load.load() == 0) {
 		return std::nullopt;
+	}
 	return TakeLocked(lock);
 }
 
@@ -47,8 +50,9 @@ std::optional<FrameQueue::Frame> FrameQueue::GetFor(std::chrono::milliseconds ti
 {
 	std::unique_lock lock(m_mutex);
 	m_notEmpty.wait_for(lock, timeout, [this] { return m_closed.load() || m_load.load() > 0; });
-	if (m_load.load() == 0)
+	if (m_load.load() == 0) {
 		return std::nullopt;
+	}
 	return TakeLocked(lock);
 }
 

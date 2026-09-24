@@ -29,8 +29,9 @@ BOOL CVideoDeviceSel::OnInitDialog()
 	// The list box is not sorted, so its indices match m_devices.
 	for (std::size_t i = 0; i < m_devices.size(); ++i) {
 		m_listbox.AddString(m_devices[i]);
-		if (m_devices[i] == m_selName)
+		if (m_devices[i] == m_selName) {
 			m_selected = static_cast<int>(i);
+		}
 	}
 	m_listbox.SetCurSel(m_selected);
 	return TRUE;
@@ -44,6 +45,7 @@ void CVideoDeviceSel::OnDblclkDevlist()
 void CVideoDeviceSel::OnOK()
 {
 	m_selected = m_listbox.GetCurSel();
-	if (m_selected >= 0)
+	if (m_selected >= 0) {
 		CDialog::OnOK();
+	}
 }

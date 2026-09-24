@@ -255,6 +255,15 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
 - Formatting: `.clang-format` at the root (external/ opts out). Run VS's
   `VC\Tools\Llvm\x64\bin\clang-format.exe -i` on changed files. Include order is
   preserved deliberately: `stdafx.h` must be first in every WinDV `.cpp`.
+- **Style is a build error.** C++ files that don't match `.clang-format`, which includes
+  `InsertBraces` (braces on every `if`/`for`/`while`, even one-liners), fail the build
+  through `Directory.Build.targets` (errors with code `FORMAT`; `resource.h` and
+  `external\` are skipped). In C#, `.editorconfig` makes missing braces (IDE0011) and
+  .NET naming (IDE1006) errors: PascalCase types/members/constants/static readonly and
+  non-private fields, `_camelCase` private fields, `s_camelCase` private static fields,
+  camelCase locals/parameters. P/Invoke methods get PascalCase names plus
+  `EntryPoint = "native_name"`. Renaming one without `EntryPoint` still builds, but fails
+  at runtime. C++ naming keeps its MFC style (`m_`, `CClass`).
 - Registry value names are a compatibility surface. Keep them, including the
   misspelled `DiscontinuityTreshold`.
 - `legacy/` holds the original VC6 `.dsp`/`.dsw`/`.clw` and `CppProperties.json` (a

@@ -25,15 +25,17 @@ bool IsOnTape(DeckMode mode)
 DeckRequest ResolveDeckCommand(DeckCommand command, DeckMode current)
 {
 	// Recording to tape is driven by the record pipeline, not these buttons.
-	if (current == DeckMode::Recording || current == DeckMode::RecordPaused)
+	if (current == DeckMode::Recording || current == DeckMode::RecordPaused) {
 		return command == DeckCommand::Stop ? DeckRequest::Stop : DeckRequest::None;
+	}
 
 	switch (command) {
 	case DeckCommand::Play:
 		return current == DeckMode::Playing ? DeckRequest::None : DeckRequest::Play;
 	case DeckCommand::Pause:
-		if (current == DeckMode::Paused)
+		if (current == DeckMode::Paused) {
 			return DeckRequest::Play; // pause again resumes, as on a VCR
+		}
 		return IsOnTape(current) ? DeckRequest::Freeze : DeckRequest::PlayThenFreeze;
 	case DeckCommand::Stop:
 		return current == DeckMode::Stopped ? DeckRequest::None : DeckRequest::Stop;

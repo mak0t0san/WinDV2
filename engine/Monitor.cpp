@@ -11,10 +11,12 @@ namespace {
 void SetDVDecoding(IGraphBuilder* graph, bool fullResolution)
 {
 	CComPtr<IBaseFilter> decoder;
-	if (graph->FindFilterByName(L"DV Video Decoder", &decoder) != S_OK)
+	if (graph->FindFilterByName(L"DV Video Decoder", &decoder) != S_OK) {
 		return;
-	if (CComQIPtr<IIPDVDec> dvDec = decoder)
+	}
+	if (CComQIPtr<IIPDVDec> dvDec = decoder) {
 		dvDec->put_IPDisplay(fullResolution ? DVDECODERRESOLUTION_720x480 : DVDECODERRESOLUTION_360x240);
+	}
 }
 
 } // namespace
@@ -39,8 +41,9 @@ CMonitor::~CMonitor()
 	// Stopping the graph decommits the allocator, which releases the thread if
 	// it is blocked in GetDeliveryBuffer.
 	m_MC->Stop();
-	if (m_thread.joinable())
+	if (m_thread.joinable()) {
 		m_thread.join();
+	}
 
 	m_VW->put_Visible(OAFALSE);
 	m_VW->put_Owner(0);
@@ -63,11 +66,13 @@ void CMonitor::HandleFrame(REFERENCE_TIME /*duration*/, std::span<const BYTE> fr
 {
 	{
 		std::lock_guard lock(m_mutex);
-		if (!m_sample || m_sampleFilled || frame.size() > static_cast<std::size_t>(m_sample->GetSize()))
+		if (!m_sample || m_sampleFilled || frame.size() > static_cast<std::size_t>(m_sample->GetSize())) {
 			return;
+		}
 		BYTE* data = nullptr;
-		if (FAILED(m_sample->GetPointer(&data)))
+		if (FAILED(m_sample->GetPointer(&data))) {
 			return;
+		}
 		std::copy(frame.begin(), frame.end(), data);
 		m_sample->SetActualDataLength(static_cast<long>(frame.size()));
 		m_sample->SetSyncPoint(TRUE);
@@ -105,8 +110,9 @@ void CMonitor::MonitoringThread(std::stop_token stop)
 			m_sampleFilled = false;
 			const bool filled = m_filled.wait(lock, stop, [this] { return m_sampleFilled; });
 			m_sample.Release();
-			if (!filled)
+			if (!filled) {
 				return;
+			}
 		}
 		lastDelivery = GetTickCount64();
 		Deliver(sample);

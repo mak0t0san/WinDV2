@@ -60,11 +60,13 @@ BOOL CCaptureCfg::OnInitDialog()
 	int pos = 0;
 	for (CString format = m_dtformathistory.Tokenize(L"\n", pos); pos >= 0;
 	     format = m_dtformathistory.Tokenize(L"\n", pos)) {
-		if (format != m_dtformat)
+		if (format != m_dtformat) {
 			m_dtformatctl.AddString(format);
+		}
 	}
-	if (!m_dtformat.IsEmpty())
+	if (!m_dtformat.IsEmpty()) {
 		m_dtformatctl.AddString(L""); // offer "no date in the name"
+	}
 
 	m_ndigitsctl.SetCurSel(m_ndigits);
 	UpdateExample();
@@ -74,10 +76,11 @@ BOOL CCaptureCfg::OnInitDialog()
 
 void CCaptureCfg::OnTimer(UINT_PTR nIDEvent)
 {
-	if (nIDEvent == kExampleTimer)
+	if (nIDEvent == kExampleTimer) {
 		UpdateExample();
-	else
+	} else {
 		CPropertyPage::OnTimer(nIDEvent);
+	}
 }
 
 // Shows what a capture filename would look like with the current settings.
@@ -92,8 +95,9 @@ void CCaptureCfg::UpdateExample()
 		return;
 	}
 	const CString date = windv::FormatTime(format.GetString(), std::time(nullptr)).c_str();
-	if (!date.IsEmpty())
+	if (!date.IsEmpty()) {
 		example += L"." + date;
+	}
 
 	const int digits = m_ndigitsctl.GetCurSel();
 	if (digits > 0) {
@@ -111,18 +115,21 @@ void CCaptureCfg::OnOK()
 	// Rebuild the history: the chosen format goes to the top (it is stored
 	// separately), followed by the rest, most recent first.
 	const int current = m_dtformatctl.FindStringExact(-1, m_dtformat);
-	if (current >= 0)
+	if (current >= 0) {
 		m_dtformatctl.DeleteString(current);
+	}
 
 	m_dtformathistory.Empty();
 	const int count = (std::min)(m_dtformatctl.GetCount(), kMaxHistory);
 	for (int i = 0; i < count; ++i) {
 		CString format;
 		m_dtformatctl.GetLBText(i, format);
-		if (format.IsEmpty())
+		if (format.IsEmpty()) {
 			continue;
-		if (!m_dtformathistory.IsEmpty())
+		}
+		if (!m_dtformathistory.IsEmpty()) {
 			m_dtformathistory += L"\n";
+		}
 		m_dtformathistory += format;
 	}
 }

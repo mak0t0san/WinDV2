@@ -41,19 +41,23 @@ public:
 		STDMETHODIMP Receive(IMediaSample* sample) override
 		{
 			HRESULT hr = CBaseInputPin::Receive(sample);
-			if (hr != S_OK)
+			if (hr != S_OK) {
 				return hr;
+			}
 
 			CFrameHandler* handler = Handler();
-			if (!handler)
+			if (!handler) {
 				return S_OK;
+			}
 
 			REFERENCE_TIME start = 0, end = 0;
-			if (FAILED(sample->GetTime(&start, &end)))
+			if (FAILED(sample->GetTime(&start, &end))) {
 				start = end = 0;
+			}
 			BYTE* data = nullptr;
-			if (FAILED(sample->GetPointer(&data)))
+			if (FAILED(sample->GetPointer(&data))) {
 				return E_UNEXPECTED;
+			}
 			const long length = sample->GetActualDataLength();
 
 			// Exceptions must not cross the COM boundary into the upstream filter.
@@ -122,8 +126,9 @@ void CInputGraph::Run(CFrameHandler* handler)
 
 void CInputGraph::Stop()
 {
-	if (m_MC)
+	if (m_MC) {
 		m_MC->Stop();
+	}
 	m_handler = nullptr;
 }
 
@@ -133,6 +138,7 @@ void CInputGraph::GetMediaType(CMediaType* type)
 	CheckHR(m_inputFilter->m_input->ConnectionMediaType(&mt), L"The source is not connected");
 	*type = mt;
 	FreeMediaType(mt);
-	if (type->GetSampleSize() < kMinDVSampleSize)
+	if (type->GetSampleSize() < kMinDVSampleSize) {
 		type->SetSampleSize(kMinDVSampleSize);
+	}
 }

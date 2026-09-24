@@ -12,8 +12,9 @@ namespace {
 std::wstring Trim(std::wstring_view text)
 {
 	const auto first = text.find_first_not_of(L" \t\r\n");
-	if (first == std::wstring_view::npos)
+	if (first == std::wstring_view::npos) {
 		return {};
+	}
 	const auto last = text.find_last_not_of(L" \t\r\n");
 	return std::wstring(text.substr(first, last - first + 1));
 }
@@ -46,8 +47,9 @@ CAVIReader::CAVIReader(const std::wstring& filename)
 		CheckSucceeded(m_GB->RenderStream(nullptr, nullptr, muxer, nullptr, m_inputFilterRef),
 		               filename + L" is not a DV AVI file");
 	}
-	if (!IsInputConnected())
+	if (!IsInputConnected()) {
 		throw DShowError(filename + L" is not a DV AVI file");
+	}
 #ifdef DEBUG
 	DumpGraph(m_FG, 0);
 #endif
@@ -61,28 +63,33 @@ CAVIJoiner::CAVIJoiner(const std::wstring& filenames)
 	std::size_t start = 0;
 	while (start <= filenames.size()) {
 		std::size_t end = filenames.find(L'|', start);
-		if (end == std::wstring::npos)
+		if (end == std::wstring::npos) {
 			end = filenames.size();
+		}
 		const std::wstring pattern = Trim(std::wstring_view(filenames).substr(start, end - start));
 		start = end + 1;
-		if (pattern.empty())
+		if (pattern.empty()) {
 			continue;
+		}
 
 		const std::vector<FoundFile> found = FindFiles(pattern);
-		if (found.empty())
+		if (found.empty()) {
 			throw DShowError(pattern + L": file not found");
+		}
 		std::vector<std::wstring> matches;
 		for (const FoundFile& file : found) {
-			if (!file.isDirectory)
+			if (!file.isDirectory) {
 				matches.push_back(file.path);
+			}
 		}
 		std::ranges::sort(
 		    matches, [](const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
 		m_filenames.insert(m_filenames.end(), matches.begin(), matches.end());
 	}
 
-	if (m_filenames.empty())
+	if (m_filenames.empty()) {
 		throw DShowError(L"No file selected");
+	}
 	m_reader = std::make_unique<CAVIReader>(m_filenames[m_next++]);
 }
 
@@ -117,10 +124,12 @@ void CAVIJoiner::Stop()
 
 void CAVIJoiner::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame)
 {
-	if (m_stopping)
+	if (m_stopping) {
 		return;
-	if (CFrameHandler* handler = m_handler.load())
+	}
+	if (CFrameHandler* handler = m_handler.load()) {
 		handler->HandleFrame(duration, frame);
+	}
 }
 
 void CAVIJoiner::EndOfStream()
@@ -139,8 +148,9 @@ void CAVIJoiner::JoinerThread(std::stop_token stop)
 		for (;;) {
 			{
 				std::unique_lock lock(m_mutex);
-				if (!m_readerEnded.wait(lock, stop, [this] { return m_readerEndedFlag; }))
+				if (!m_readerEnded.wait(lock, stop, [this] { return m_readerEndedFlag; })) {
 					return; // stop requested
+				}
 				m_readerEndedFlag = false;
 			}
 
@@ -148,15 +158,17 @@ void CAVIJoiner::JoinerThread(std::stop_token stop)
 			// streaming thread, which would deadlock stopping its graph.
 			m_reader.reset();
 			if (m_next >= m_filenames.size()) {
-				if (CFrameHandler* handler = m_handler.load())
+				if (CFrameHandler* handler = m_handler.load()) {
 					handler->EndOfStream();
+				}
 				return;
 			}
 			m_reader = std::make_unique<CAVIReader>(m_filenames[m_next++]);
 			m_reader->Run(this);
 		}
 	} catch (const DShowError& e) {
-		if (CFrameHandler* handler = m_handler.load())
+		if (CFrameHandler* handler = m_handler.load()) {
 			handler->SourceError(e.Message());
+		}
 	}
 }

@@ -68,13 +68,16 @@ windv::DeckMode ToDeckMode(long mode)
 	default:
 		break;
 	}
-	if (InRange(mode, kModePlaySlowFwdFirst, kModePlaySlowFwdLast))
+	if (InRange(mode, kModePlaySlowFwdFirst, kModePlaySlowFwdLast)) {
 		return DeckMode::Playing;
-	if (InRange(mode, kModePlayFastFwdFirst, kModePlayFastFwdLast))
+	}
+	if (InRange(mode, kModePlayFastFwdFirst, kModePlayFastFwdLast)) {
 		return DeckMode::CueForward;
+	}
 	if (InRange(mode, kModePlaySlowRevFirst, kModePlaySlowRevLast) ||
-	    InRange(mode, kModePlayFastRevFirst, kModePlayFastRevLast))
+	    InRange(mode, kModePlayFastRevFirst, kModePlayFastRevLast)) {
 		return DeckMode::CueReverse;
+	}
 	return DeckMode::Unknown;
 }
 
@@ -89,8 +92,9 @@ void ForEachVideoDevice(Visitor&& visit)
 	CComPtr<IEnumMoniker> monikers;
 	const HRESULT hr = devEnum->CreateClassEnumerator(CLSID_VideoInputDeviceCategory, &monikers, 0);
 	CheckSucceeded(hr, L"Can't enumerate video devices");
-	if (hr != S_OK) // S_FALSE: the category is empty
+	if (hr != S_OK) { // S_FALSE: the category is empty
 		return;
+	}
 
 	CComPtr<IBindCtx> bindContext;
 	CheckHR(CreateBindCtx(0, &bindContext), L"Can't create a bind context");
@@ -101,8 +105,9 @@ void ForEachVideoDevice(Visitor&& visit)
 		if (SUCCEEDED(moniker->BindToStorage(bindContext, nullptr, IID_PPV_ARGS(&bag)))) {
 			CComVariant name;
 			if (SUCCEEDED(bag->Read(L"FriendlyName", &name, nullptr)) && name.vt == VT_BSTR) {
-				if (!visit(std::wstring(name.bstrVal), moniker.p, bindContext.p))
+				if (!visit(std::wstring(name.bstrVal), moniker.p, bindContext.p)) {
 					return;
+				}
 			}
 		}
 		moniker.Release();
@@ -113,13 +118,15 @@ CComPtr<IBaseFilter> FindVideoDevice(const std::wstring& device)
 {
 	CComPtr<IBaseFilter> filter;
 	ForEachVideoDevice([&](const std::wstring& name, IMoniker* moniker, IBindCtx* bindContext) {
-		if (name != device)
+		if (name != device) {
 			return true;
+		}
 		CheckHR(moniker->BindToObject(bindContext, nullptr, IID_PPV_ARGS(&filter)), L"Can't open the video device");
 		return false;
 	});
-	if (!filter)
+	if (!filter) {
 		throw DShowError(L"Video device \"" + device + L"\" not found", S_OK, DShowError::Cause::DeviceNotFound);
+	}
 	return filter;
 }
 
@@ -130,8 +137,9 @@ std::wstring DevicePath(IMoniker* moniker, IBindCtx* bindContext)
 	CComPtr<IPropertyBag> bag;
 	CComVariant path;
 	if (SUCCEEDED(moniker->BindToStorage(bindContext, nullptr, IID_PPV_ARGS(&bag))) &&
-	    SUCCEEDED(bag->Read(L"DevicePath", &path, nullptr)) && path.vt == VT_BSTR)
+	    SUCCEEDED(bag->Read(L"DevicePath", &path, nullptr)) && path.vt == VT_BSTR) {
 		return path.bstrVal;
+	}
 	return {};
 }
 
@@ -145,8 +153,9 @@ std::vector<std::wstring> GetVideoDeviceList()
 	std::vector<std::wstring> all, dv;
 	ForEachVideoDevice([&](const std::wstring& name, IMoniker* moniker, IBindCtx* bindContext) {
 		all.push_back(name);
-		if (windv::IsDVDevicePath(DevicePath(moniker, bindContext)))
+		if (windv::IsDVDevicePath(DevicePath(moniker, bindContext))) {
 			dv.push_back(name);
+		}
 		return true;
 	});
 	// Unusual DV hardware on another bus shouldn't leave the list empty.
@@ -166,16 +175,18 @@ windv::DeckMode DVTransport::Mode()
 {
 	using windv::DeckMode;
 	long mode = 0;
-	if (!m_ET || FAILED(m_ET->get_Mode(&mode)))
+	if (!m_ET || FAILED(m_ET->get_Mode(&mode))) {
 		return DeckMode::Unknown;
+	}
 	return ToDeckMode(mode);
 }
 
 void DVTransport::Command(windv::DeckCommand command)
 {
 	using windv::DeckRequest;
-	if (!m_ET)
+	if (!m_ET) {
 		return;
+	}
 	switch (windv::ResolveDeckCommand(command, Mode())) {
 	case DeckRequest::None:
 		break;
@@ -209,14 +220,16 @@ void DVTransport::Command(windv::DeckCommand command)
 
 void DVTransport::CtrlStop()
 {
-	if (m_ET)
+	if (m_ET) {
 		m_ET->put_Mode(ED_MODE_STOP);
+	}
 }
 
 void DVTransport::CtrlPlay()
 {
-	if (m_ET)
+	if (m_ET) {
 		m_ET->put_Mode(ED_MODE_PLAY);
+	}
 }
 
 void DVTransport::CtrlPause()
@@ -229,14 +242,16 @@ void DVTransport::CtrlPause()
 
 void DVTransport::CtrlRecord()
 {
-	if (m_ET)
+	if (m_ET) {
 		m_ET->put_Mode(ED_MODE_RECORD);
+	}
 }
 
 void DVTransport::CtrlRecPause()
 {
-	if (m_ET)
+	if (m_ET) {
 		m_ET->put_Mode(ED_MODE_RECORD_FREEZE);
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -282,8 +297,9 @@ CDVOutput::CDVOutput(const std::wstring& device, const CMediaType& type) : COutp
 	if (m_MC->Run() != S_OK) {
 		OAFilterState state = State_Stopped;
 		CheckHR(m_MC->GetState(1000, &state), L"Can't start DV output");
-		if (state != State_Running)
+		if (state != State_Running) {
 			throw DShowError(L"DV output not running");
+		}
 	}
 }
 

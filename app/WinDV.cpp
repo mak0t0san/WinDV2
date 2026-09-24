@@ -35,8 +35,9 @@ BOOL CWinDVApp::InitInstance()
 		m_pMainWnd = nullptr;
 	}
 
-	if (SUCCEEDED(hrCom))
+	if (SUCCEEDED(hrCom)) {
 		CoUninitialize();
+	}
 	// The dialog has closed; return FALSE to exit instead of starting a message pump.
 	return FALSE;
 }
@@ -59,8 +60,9 @@ void SelectFile(bool open, CWnd* ctrl)
 	GetCurrentDirectory(static_cast<DWORD>(initialDir.size()), initialDir.data());
 	dlg.m_ofn.lpstrInitialDir = initialDir.data();
 
-	if (dlg.DoModal() != IDOK)
+	if (dlg.DoModal() != IDOK) {
 		return;
+	}
 	SetCurrentDirectory(dlg.GetFolderPath());
 
 	CString text;
@@ -68,8 +70,9 @@ void SelectFile(bool open, CWnd* ctrl)
 		POSITION pos = dlg.GetStartPosition();
 		while (pos) {
 			text += dlg.GetNextPathName(pos);
-			if (pos)
+			if (pos) {
 				text += L" | ";
+			}
 		}
 	} else {
 		text = dlg.GetPathName();

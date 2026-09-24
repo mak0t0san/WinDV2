@@ -30,14 +30,16 @@ void CDV::OnSize(UINT nType, int cx, int cy)
 // ::PostMessage is safe here.
 void CDV::OnDVTimeChanged()
 {
-	if (m_notifyWnd)
+	if (m_notifyWnd) {
 		::PostMessage(m_notifyWnd, WM_DV_TIMECHANGE, 0, 0);
+	}
 }
 
 void CDV::OnError()
 {
-	if (m_notifyWnd)
+	if (m_notifyWnd) {
 		::PostMessage(m_notifyWnd, WM_DV_ERROR, 0, 0);
+	}
 }
 
 void CDV::AttachWindows()

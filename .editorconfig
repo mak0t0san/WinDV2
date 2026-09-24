@@ -17,6 +17,108 @@ tab_width = 4
 charset = unset
 indent_style = unset
 
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# Braces on every if/else/for/foreach/while/do/using/lock/fixed, even one-liners.
+# Build error (IDE0011; EnforceCodeStyleInBuild is on in ui/WinDV.csproj).
+csharp_prefer_braces = true:error
+dotnet_diagnostic.IDE0011.severity = error
+# The same for Rider's inspections and Code Cleanup.
+resharper_braces_for_ifelse = required
+resharper_braces_for_for = required
+resharper_braces_for_foreach = required
+resharper_braces_for_while = required
+resharper_braces_for_dowhile = required
+resharper_braces_for_using = required
+resharper_braces_for_lock = required
+resharper_braces_for_fixed = required
+resharper_enforce_if_statement_braces_highlighting = error
+resharper_enforce_for_statement_braces_highlighting = error
+resharper_enforce_foreach_statement_braces_highlighting = error
+resharper_enforce_while_statement_braces_highlighting = error
+resharper_enforce_do_while_statement_braces_highlighting = error
+resharper_enforce_using_statement_braces_highlighting = error
+resharper_enforce_lock_statement_braces_highlighting = error
+resharper_enforce_fixed_statement_braces_highlighting = error
+
+# Naming: Microsoft's .NET conventions. Build error (IDE1006).
+# P/Invoke methods are named in PascalCase too, with the export in EntryPoint.
+dotnet_diagnostic.IDE1006.severity = error
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.camel_case.capitalization = camel_case
+dotnet_naming_style.i_prefix.capitalization = pascal_case
+dotnet_naming_style.i_prefix.required_prefix = I
+dotnet_naming_style.t_prefix.capitalization = pascal_case
+dotnet_naming_style.t_prefix.required_prefix = T
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.s_camel.capitalization = camel_case
+dotnet_naming_style.s_camel.required_prefix = s_
+
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_symbols.interfaces.applicable_accessibilities = *
+dotnet_naming_rule.interfaces.symbols = interfaces
+dotnet_naming_rule.interfaces.style = i_prefix
+dotnet_naming_rule.interfaces.severity = error
+
+dotnet_naming_symbols.type_parameters.applicable_kinds = type_parameter
+dotnet_naming_rule.type_parameters.symbols = type_parameters
+dotnet_naming_rule.type_parameters.style = t_prefix
+dotnet_naming_rule.type_parameters.severity = error
+
+dotnet_naming_symbols.types.applicable_kinds = namespace, class, struct, enum, delegate
+dotnet_naming_symbols.types.applicable_accessibilities = *
+dotnet_naming_rule.types.symbols = types
+dotnet_naming_rule.types.style = pascal_case
+dotnet_naming_rule.types.severity = error
+
+dotnet_naming_symbols.members.applicable_kinds = method, local_function, property, event
+dotnet_naming_symbols.members.applicable_accessibilities = *
+dotnet_naming_rule.members.symbols = members
+dotnet_naming_rule.members.style = pascal_case
+dotnet_naming_rule.members.severity = error
+
+dotnet_naming_symbols.constants.applicable_kinds = field, local
+dotnet_naming_symbols.constants.applicable_accessibilities = *
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_rule.constants.symbols = constants
+dotnet_naming_rule.constants.style = pascal_case
+dotnet_naming_rule.constants.severity = error
+
+dotnet_naming_symbols.static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.static_readonly_fields.applicable_accessibilities = *
+dotnet_naming_symbols.static_readonly_fields.required_modifiers = static, readonly
+dotnet_naming_rule.static_readonly_fields.symbols = static_readonly_fields
+dotnet_naming_rule.static_readonly_fields.style = pascal_case
+dotnet_naming_rule.static_readonly_fields.severity = error
+
+dotnet_naming_symbols.visible_fields.applicable_kinds = field
+dotnet_naming_symbols.visible_fields.applicable_accessibilities = public, internal, protected_internal
+dotnet_naming_rule.visible_fields.symbols = visible_fields
+dotnet_naming_rule.visible_fields.style = pascal_case
+dotnet_naming_rule.visible_fields.severity = error
+
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private, protected, private_protected
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
+dotnet_naming_rule.private_static_fields.symbols = private_static_fields
+dotnet_naming_rule.private_static_fields.style = s_camel
+dotnet_naming_rule.private_static_fields.severity = error
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private, protected, private_protected
+dotnet_naming_rule.private_fields.symbols = private_fields
+dotnet_naming_rule.private_fields.style = underscore_camel
+dotnet_naming_rule.private_fields.severity = error
+
+dotnet_naming_symbols.parameters_and_locals.applicable_kinds = parameter, local
+dotnet_naming_rule.parameters_and_locals.symbols = parameters_and_locals
+dotnet_naming_rule.parameters_and_locals.style = camel_case
+dotnet_naming_rule.parameters_and_locals.severity = error
+
 [*.{vcxproj,props,targets,xml,manifest}]
 indent_style = space
 indent_size = 2

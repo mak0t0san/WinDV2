@@ -30,9 +30,9 @@ public sealed class SettingsStore
     // Capture
     public string CaptureDevice { get; set; } = DefaultDevice;
     public string CaptureFile { get; set; } = "";
-    public bool Type2AVI { get; set; } = true;
+    public bool Type2Avi { get; set; } = true;
     public int DiscontinuityThreshold { get; set; } = 1;
-    public int MaxAVIFrames { get; set; } = 25 * 60 * 15;
+    public int MaxAviFrames { get; set; } = 25 * 60 * 15;
     public int EveryNth { get; set; } = 1;
     public string DateTimeFormat { get; set; } = "%y-%m-%d_%H-%M";
     public List<string> DateTimeFormatHistory { get; set; } = [];
@@ -44,8 +44,8 @@ public sealed class SettingsStore
     // Record
     public string RecordDevice { get; set; } = DefaultDevice;
     public string RecordFile { get; set; } = "";
-    public string AVIPrefix { get; set; } = "";
-    public string AVISuffix { get; set; } = "";
+    public string AviPrefix { get; set; } = "";
+    public string AviSuffix { get; set; } = "";
     public bool RecordPreview { get; set; } = true;
 
     // Updates (new in WinDV 2; the MFC app ignores this subkey)
@@ -78,9 +78,9 @@ public sealed class SettingsStore
 
         s.CaptureDevice = GetString(capture, "DVDevice", DefaultDevice);
         s.CaptureFile = GetString(capture, "File", "");
-        s.Type2AVI = GetInt(capture, "Type2AVI", 1) > 0;
+        s.Type2Avi = GetInt(capture, "Type2AVI", 1) > 0;
         s.DiscontinuityThreshold = Math.Max(0, GetInt(capture, "DiscontinuityTreshold", 1));
-        s.MaxAVIFrames = Math.Max(10, GetInt(capture, "MaxAVIFrames", 25 * 60 * 15));
+        s.MaxAviFrames = Math.Max(10, GetInt(capture, "MaxAVIFrames", 25 * 60 * 15));
         s.EveryNth = Math.Max(1, GetInt(capture, "EveryNth", 1));
         s.DateTimeFormat = GetString(capture, "DateTimeFormat", "%y-%m-%d_%H-%M");
         s.DateTimeFormatHistory = GetString(capture, "DateTimeFormatHistory", DefaultFormatHistory)
@@ -91,8 +91,8 @@ public sealed class SettingsStore
 
         s.RecordDevice = GetString(record, "DVDevice", DefaultDevice);
         s.RecordFile = GetString(record, "File", "");
-        s.AVIPrefix = GetString(record, "AVIPrefix", "");
-        s.AVISuffix = GetString(record, "AVISuffix", "");
+        s.AviPrefix = GetString(record, "AVIPrefix", "");
+        s.AviSuffix = GetString(record, "AVISuffix", "");
         s.RecordPreview = GetInt(record, "Preview", 1) > 0;
 
         s.CheckForUpdates = GetInt(updates, "CheckForUpdates", 1) > 0;
@@ -119,9 +119,9 @@ public sealed class SettingsStore
         {
             capture.SetValue("DVDevice", CaptureDevice, RegistryValueKind.String);
             capture.SetValue("File", CaptureFile, RegistryValueKind.String);
-            SetInt(capture, "Type2AVI", Type2AVI ? 1 : 0);
+            SetInt(capture, "Type2AVI", Type2Avi ? 1 : 0);
             SetInt(capture, "DiscontinuityTreshold", DiscontinuityThreshold);
-            SetInt(capture, "MaxAVIFrames", MaxAVIFrames);
+            SetInt(capture, "MaxAVIFrames", MaxAviFrames);
             SetInt(capture, "EveryNth", EveryNth);
             capture.SetValue("DateTimeFormat", DateTimeFormat, RegistryValueKind.String);
             capture.SetValue("DateTimeFormatHistory", string.Join("\n", DateTimeFormatHistory),
@@ -133,8 +133,8 @@ public sealed class SettingsStore
         {
             record.SetValue("DVDevice", RecordDevice, RegistryValueKind.String);
             record.SetValue("File", RecordFile, RegistryValueKind.String);
-            record.SetValue("AVIPrefix", AVIPrefix, RegistryValueKind.String);
-            record.SetValue("AVISuffix", AVISuffix, RegistryValueKind.String);
+            record.SetValue("AVIPrefix", AviPrefix, RegistryValueKind.String);
+            record.SetValue("AVISuffix", AviSuffix, RegistryValueKind.String);
             SetInt(record, "Preview", RecordPreview ? 1 : 0);
         }
         using (RegistryKey updates = root.CreateSubKey("Updates"))
@@ -151,7 +151,10 @@ public sealed class SettingsStore
     {
         var history = new List<string>();
         if (DateTimeFormat.Length > 0)
+        {
             history.Add(DateTimeFormat);
+        }
+
         history.AddRange(DateTimeFormatHistory);
         DateTimeFormatHistory = history
             .Where(f => f.Length > 0 && f != format)

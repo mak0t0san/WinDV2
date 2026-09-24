@@ -43,8 +43,9 @@ private:
 		std::thread([url = std::wstring(target)] {
 			const HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 			ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-			if (SUCCEEDED(hr))
+			if (SUCCEEDED(hr)) {
 				CoUninitialize();
+			}
 		}).detach();
 	}
 };
@@ -155,10 +156,12 @@ CDVToolsDlg::CDVToolsDlg(CWnd* pParent)
 
 CDVToolsDlg::~CDVToolsDlg()
 {
-	if (m_hIcon)
+	if (m_hIcon) {
 		DestroyIcon(m_hIcon);
-	if (m_hIconSmall)
+	}
+	if (m_hIconSmall) {
 		DestroyIcon(m_hIconSmall);
+	}
 }
 
 void CDVToolsDlg::DoDataExchange(CDataExchange* pDX)
@@ -242,8 +245,9 @@ BOOL CDVToolsDlg::OnInitDialog()
 
 	LoadSettings();
 
-	if (!RunCommandLine())
+	if (!RunCommandLine()) {
 		EndDialog(IDCANCEL);
+	}
 	return TRUE;
 }
 
@@ -255,10 +259,11 @@ void CDVToolsDlg::LoadSettings()
 	const int wy = app->GetProfileInt(L"MainWindow", L"Y", 0);
 	const int ww = app->GetProfileInt(L"MainWindow", L"W", 0);
 	const int wh = app->GetProfileInt(L"MainWindow", L"H", 0);
-	if (ww > 0 && wh > 0)
+	if (ww > 0 && wh > 0) {
 		SetWindowPos(nullptr, wx, wy, ww, wh, SWP_NOZORDER);
-	else
+	} else {
 		PostMessage(WM_SYSCOMMAND, IDM_ABOUTBOX, 0); // first run
+	}
 
 	m_video.m_DVctrl = app->GetProfileInt(L"MainWindow", L"DVControlEnabled", m_video.m_DVctrl ? 1 : 0) > 0;
 	m_DVCtrl.SetCheck(m_video.m_DVctrl ? BST_CHECKED : BST_UNCHECKED);
@@ -340,8 +345,9 @@ bool CDVToolsDlg::RunCommandLine()
 	std::vector<std::wstring> args;
 	int argc = 0;
 	if (LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc)) {
-		for (int i = 1; i < argc; ++i)
+		for (int i = 1; i < argc; ++i) {
 			args.emplace_back(argv[i]);
+		}
 		LocalFree(argv);
 	}
 
@@ -377,8 +383,9 @@ bool CDVToolsDlg::RunCommandLine()
 		m_exitOnFinish = commandLine->exitOnFinish;
 		CString files;
 		for (const std::wstring& file : commandLine->recordFiles) {
-			if (!files.IsEmpty())
+			if (!files.IsEmpty()) {
 				files += L" | ";
+			}
 			files += file.c_str();
 		}
 		Guarded([&] {
@@ -464,10 +471,12 @@ void CDVToolsDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI)
 void CDVToolsDlg::OnSize(UINT nType, int cx, int cy)
 {
 	CDialog::OnSize(nType, cx, cy);
-	if (nType == SIZE_RESTORED)
+	if (nType == SIZE_RESTORED) {
 		GetWindowRect(&m_lastRect);
-	if (m_originalRects.size() != kCtrlProperties.size())
+	}
+	if (m_originalRects.size() != kCtrlProperties.size()) {
 		return; // not initialized yet
+	}
 
 	const int dx = cx - m_originalRect.right;
 	const int dy = cy - m_originalRect.bottom;
@@ -486,8 +495,9 @@ void CDVToolsDlg::OnSize(UINT nType, int cx, int cy)
 void CDVToolsDlg::OnMove(int x, int y)
 {
 	CDialog::OnMove(x, y);
-	if (!IsIconic() && !IsZoomed())
+	if (!IsIconic() && !IsZoomed()) {
 		GetWindowRect(&m_lastRect);
+	}
 }
 
 int CDVToolsDlg::CurrentTab() const
@@ -499,8 +509,9 @@ int CDVToolsDlg::CurrentTab() const
 void CDVToolsDlg::ShowTabControls()
 {
 	const int tabBit = 1 << CurrentTab();
-	for (const CtrlProperties& ctrl : kCtrlProperties)
+	for (const CtrlProperties& ctrl : kCtrlProperties) {
 		GetDlgItem(ctrl.id)->ShowWindow((ctrl.tabMask & tabBit) ? SW_SHOW : SW_HIDE);
+	}
 	UpdateWindow();
 }
 
@@ -520,8 +531,9 @@ void CDVToolsDlg::OnSelchangeToolTab(NMHDR* /*pNMHDR*/, LRESULT* pResult)
 void CDVToolsDlg::OnCmdTabChange(UINT nID)
 {
 	const int newTab = static_cast<int>(nID - IDC_TAB_CHANGE);
-	if (m_toolTab.IsWindowEnabled() && m_toolTab.GetCurSel() != newTab)
+	if (m_toolTab.IsWindowEnabled() && m_toolTab.GetCurSel() != newTab) {
 		SelectTab(newTab);
+	}
 }
 
 void CDVToolsDlg::SetToolTabItemSize()
@@ -534,8 +546,9 @@ void CDVToolsDlg::SetToolTabItemSize()
 
 HBRUSH CDVToolsDlg::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 {
-	if (pWnd->GetDlgCtrlID() == IDC_VIDEO)
+	if (pWnd->GetDlgCtrlID() == IDC_VIDEO) {
 		return static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+	}
 	return CDialog::OnCtlColor(pDC, pWnd, nCtlColor);
 }
 
@@ -562,8 +575,9 @@ bool CDVToolsDlg::SelectDevice(CString& deviceName, CStatic& label)
 {
 	std::vector<CString> devices;
 	try {
-		for (const std::wstring& device : GetVideoDeviceList())
+		for (const std::wstring& device : GetVideoDeviceList()) {
 			devices.emplace_back(device.c_str());
+		}
 	} catch (const DShowError& e) {
 		ShowError(e.Message().c_str());
 		return false;
@@ -575,8 +589,9 @@ bool CDVToolsDlg::SelectDevice(CString& deviceName, CStatic& label)
 	}
 
 	CVideoDeviceSel devSel(devices, deviceName, this);
-	if (devSel.DoModal() != IDOK || devSel.GetSelection() < 0)
+	if (devSel.DoModal() != IDOK || devSel.GetSelection() < 0) {
 		return false;
+	}
 	deviceName = devices[static_cast<std::size_t>(devSel.GetSelection())];
 	label.SetWindowText(deviceName);
 	return true;
@@ -584,14 +599,16 @@ bool CDVToolsDlg::SelectDevice(CString& deviceName, CStatic& label)
 
 void CDVToolsDlg::OnVsrcSel()
 {
-	if (SelectDevice(m_VSRCname, m_VSRC))
+	if (SelectDevice(m_VSRCname, m_VSRC)) {
 		InitVideo();
+	}
 }
 
 void CDVToolsDlg::OnVdstSel()
 {
-	if (SelectDevice(m_VDSTname, m_VDST))
+	if (SelectDevice(m_VDSTname, m_VDST)) {
 		InitVideo();
+	}
 }
 
 void CDVToolsDlg::StartStatusTimer()
@@ -700,8 +717,9 @@ void CDVToolsDlg::OnConfig()
 	cfgDlg.AddPage(&recordCfg);
 	cfgDlg.SetActivePage(CurrentTab());
 
-	if (cfgDlg.DoModal() != IDOK)
+	if (cfgDlg.DoModal() != IDOK) {
 		return;
+	}
 
 	m_video.m_type2AVI = captureCfg.m_type12 == 1;
 	m_video.m_discontinuityThreshold = static_cast<int>(captureCfg.m_discontinuityThreshold);
@@ -768,15 +786,17 @@ void CDVToolsDlg::OnTimer(UINT_PTR nIDEvent)
 		}
 	}
 
-	if (state == CDV::Capturing || state == CDV::Recording || state == CDV::RecordPaused)
+	if (state == CDV::Capturing || state == CDV::Recording || state == CDV::RecordPaused) {
 		queue.Format(L" Q:%u", static_cast<unsigned>(m_video.GetQueueLoad()));
+	}
 
 	// Only touch controls whose text changed, to avoid flicker.
 	const auto update = [](CStatic& ctrl, const CString& text) {
 		CString current;
 		ctrl.GetWindowText(current);
-		if (current != text)
+		if (current != text) {
 			ctrl.SetWindowText(text);
+		}
 	};
 	update(m_status, status);
 	update(m_counter, counter);
@@ -790,8 +810,9 @@ LRESULT CDVToolsDlg::OnDVTimeChange(WPARAM, LPARAM)
 	std::tm local{};
 	if (recTime > 0 && localtime_s(&local, &recTime) == 0) {
 		wchar_t buf[64] = L"";
-		if (wcsftime(buf, std::size(buf), L"%d.%m.'%y %H:%M:%S", &local) > 0)
+		if (wcsftime(buf, std::size(buf), L"%d.%m.'%y %H:%M:%S", &local) > 0) {
 			text = buf;
+		}
 	}
 	m_status2.SetWindowText(text);
 	return 0;

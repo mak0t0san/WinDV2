@@ -64,7 +64,7 @@ public enum StopReason
 
 internal enum NativeEvent
 {
-    DVTimeChanged = 1,
+    DvTimeChanged = 1,
     Error = 2,
 }
 
@@ -204,11 +204,20 @@ internal static unsafe partial class NativeMethods
             char[] buffer = new char[length];
             int needed;
             fixed (char* p = buffer)
+            {
                 needed = fill((nint)p, length);
+            }
+
             if (needed <= 0)
+            {
                 return string.Empty;
+            }
+
             if (needed <= length)
+            {
                 return new string(buffer, 0, needed - 1);
+            }
+
             length = needed;
         }
     }

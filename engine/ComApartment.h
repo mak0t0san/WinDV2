@@ -9,8 +9,9 @@ public:
 	ComApartment() : m_hr(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) {}
 	~ComApartment()
 	{
-		if (SUCCEEDED(m_hr))
+		if (SUCCEEDED(m_hr)) {
 			CoUninitialize();
+		}
 	}
 	ComApartment(const ComApartment&) = delete;
 	ComApartment& operator=(const ComApartment&) = delete;

@@ -13,13 +13,15 @@ namespace {
 // Next free capture filename for base + formatted date (see CaptureNaming.h).
 std::wstring NextCaptureFilename(const std::wstring& base, const std::wstring& dtformat, int ndigits, std::time_t tim)
 {
-	if (tim <= 0)
+	if (tim <= 0) {
 		tim = std::time(nullptr);
+	}
 	const std::wstring stem = windv::CaptureStem(base, windv::FormatTime(dtformat, tim));
 
 	std::vector<std::wstring> existing;
-	for (const FoundFile& file : FindFiles(windv::CaptureSearchPattern(stem)))
+	for (const FoundFile& file : FindFiles(windv::CaptureSearchPattern(stem))) {
 		existing.push_back(file.name);
+	}
 	return windv::NextCaptureFilename(stem, ndigits, existing);
 }
 
@@ -35,8 +37,9 @@ CAVIWriter::CAVIWriter(const std::wstring& base, const std::wstring& dtformat, i
 	CComPtr<IBaseFilter> mux;
 	CComPtr<IFileSinkFilter> sink;
 	CheckHR(m_GB->SetOutputFileName(&MEDIASUBTYPE_Avi, m_tmpfile.c_str(), &mux, &sink), L"Can't create " + m_tmpfile);
-	if (CComQIPtr<IFileSinkFilter2> sink2 = sink)
+	if (CComQIPtr<IFileSinkFilter2> sink2 = sink) {
 		sink2->SetMode(AM_FILE_OVERWRITE);
+	}
 
 	if (type2AVI) {
 		CComPtr<IBaseFilter> splitter;
@@ -60,8 +63,9 @@ CAVIWriter::CAVIWriter(const std::wstring& base, const std::wstring& dtformat, i
 
 CAVIWriter::~CAVIWriter()
 {
-	if (m_finished)
+	if (m_finished) {
 		return;
+	}
 	try {
 		Finish();
 	} catch (const DShowError& e) {
@@ -71,8 +75,9 @@ CAVIWriter::~CAVIWriter()
 
 void CAVIWriter::Finish()
 {
-	if (m_finished)
+	if (m_finished) {
 		return;
+	}
 	m_finished = true;
 
 	DeliverEndOfStream();
@@ -80,6 +85,7 @@ void CAVIWriter::Finish()
 	m_MC->Stop();
 
 	const std::wstring filename = NextCaptureFilename(m_base, m_dtformat, m_ndigits, m_dvTime);
-	if (!MoveFileExW(m_tmpfile.c_str(), filename.c_str(), 0))
+	if (!MoveFileExW(m_tmpfile.c_str(), filename.c_str(), 0)) {
 		throw DShowError(L"Can't rename " + m_tmpfile + L" to " + filename, HRESULT_FROM_WIN32(GetLastError()));
+	}
 }

@@ -13,8 +13,9 @@ std::wstring ModuleDirectory()
 	std::wstring path(MAX_PATH, L'\0');
 	for (;;) {
 		DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
-		if (length == 0)
+		if (length == 0) {
 			return {};
+		}
 		if (length < path.size()) {
 			path.resize(length);
 			break;
@@ -45,8 +46,9 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ PWSTR, _In_ int)
 	// Pass our own arguments through unchanged.
 	std::wstring commandLine = L"\"" + app + L"\"";
 	const PCWSTR args = PathGetArgsW(GetCommandLineW());
-	if (args != nullptr && *args != L'\0')
+	if (args != nullptr && *args != L'\0') {
 		commandLine += L" " + std::wstring(args);
+	}
 
 	// Forward the show state too (a shortcut set to "Run: Minimized", say).
 	STARTUPINFOW startup{};

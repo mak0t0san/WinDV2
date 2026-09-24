@@ -24,12 +24,14 @@ std::optional<Pack> FindSSYBPack(std::span<const std::uint8_t> frame, std::uint8
 		for (std::size_t block = 1; block <= 2; ++block) {
 			for (std::size_t packet = 0; packet < 6; ++packet) {
 				const std::size_t offset = seq * kDIFSequenceSize + block * kDIFBlockSize + 3 + packet * 8 + 3;
-				if (offset + 5 > frame.size())
+				if (offset + 5 > frame.size()) {
 					return std::nullopt;
+				}
 				if (frame[offset] == packId) {
 					Pack pack{};
-					for (std::size_t i = 0; i < pack.size(); ++i)
+					for (std::size_t i = 0; i < pack.size(); ++i) {
 						pack[i] = frame[offset + i];
+					}
 					return pack;
 				}
 			}
@@ -44,8 +46,9 @@ int DecodeBCD(std::uint8_t value, std::uint8_t tensMask)
 {
 	const int units = value & 0x0f;
 	const int tens = (value >> 4) & tensMask;
-	if (units > 9 || tens > 9)
+	if (units > 9 || tens > 9) {
 		return -1;
+	}
 	return tens * 10 + units;
 }
 
@@ -53,15 +56,18 @@ int DecodeBCD(std::uint8_t value, std::uint8_t tensMask)
 
 std::optional<std::time_t> GetDVRecordingTime(std::span<const std::uint8_t> frame)
 {
-	if (frame.size() != kDVFrameSizePAL && frame.size() != kDVFrameSizeNTSC)
+	if (frame.size() != kDVFrameSizePAL && frame.size() != kDVFrameSizeNTSC) {
 		return std::nullopt;
+	}
 
 	const auto date = FindSSYBPack(frame, 0x62);
-	if (!date)
+	if (!date) {
 		return std::nullopt;
+	}
 	const auto time = FindSSYBPack(frame, 0x63);
-	if (!time)
+	if (!time) {
 		return std::nullopt;
+	}
 
 	const int day = DecodeBCD((*date)[2], 0x3);
 	const int month = DecodeBCD((*date)[3], 0x1);
@@ -71,8 +77,9 @@ std::optional<std::time_t> GetDVRecordingTime(std::span<const std::uint8_t> fram
 	const int hour = DecodeBCD((*time)[4], 0x3);
 
 	if (day < 1 || day > 31 || month < 1 || month > 12 || year < 0 || sec < 0 || sec > 59 || min < 0 || min > 59 ||
-	    hour < 0 || hour > 23)
+	    hour < 0 || hour > 23) {
 		return std::nullopt;
+	}
 
 	year += year < 50 ? 2000 : 1900;
 
@@ -86,8 +93,9 @@ std::optional<std::time_t> GetDVRecordingTime(std::span<const std::uint8_t> fram
 	recDate.tm_isdst = -1;
 
 	const std::time_t result = std::mktime(&recDate);
-	if (result == static_cast<std::time_t>(-1))
+	if (result == static_cast<std::time_t>(-1)) {
 		return std::nullopt;
+	}
 	return result;
 }
 

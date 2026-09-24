@@ -63,17 +63,21 @@ std::wstring NextCaptureFilename(std::wstring_view stem, int ndigits, std::span<
 			continue;
 		}
 		// "name." + digits + ".avi"
-		if (candidate.size() <= name.size() + 1 + kExtension.size())
+		if (candidate.size() <= name.size() + 1 + kExtension.size()) {
 			continue;
-		if (!EqualsNoCase(candidate.substr(0, name.size()), name) || candidate[name.size()] != L'.')
+		}
+		if (!EqualsNoCase(candidate.substr(0, name.size()), name) || candidate[name.size()] != L'.') {
 			continue;
-		if (!EqualsNoCase(candidate.substr(candidate.size() - kExtension.size()), kExtension))
+		}
+		if (!EqualsNoCase(candidate.substr(candidate.size() - kExtension.size()), kExtension)) {
 			continue;
+		}
 
 		const std::wstring_view digits =
 		    candidate.substr(name.size() + 1, candidate.size() - name.size() - 1 - kExtension.size());
-		if (!IsDecimal(digits) || digits.size() > kMaxDigits || digits.size() < width)
+		if (!IsDecimal(digits) || digits.size() > kMaxDigits || digits.size() < width) {
 			continue;
+		}
 
 		const int number = std::stoi(std::wstring(digits));
 		if (digits.size() > width) {
@@ -85,8 +89,9 @@ std::wstring NextCaptureFilename(std::wstring_view stem, int ndigits, std::span<
 		}
 	}
 
-	if (width == 0)
+	if (width == 0) {
 		return std::wstring(stem) + (plainExists ? L".0" : L"") + std::wstring(kExtension);
+	}
 
 	wchar_t number[32];
 	swprintf_s(number, L".%0*d", static_cast<int>(width), highest + 1);

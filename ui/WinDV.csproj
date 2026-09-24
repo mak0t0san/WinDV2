@@ -32,6 +32,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Brace and naming rules from .editorconfig (IDE0011, IDE1006) fail the build. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <Version>2.3.0</Version>
     <Product>WinDV</Product>
     <Authors>Makoto</Authors>

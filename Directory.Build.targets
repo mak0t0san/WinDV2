@@ -1,0 +1,53 @@
+<Project>
+  <!-- C++ sources must match .clang-format (which also requires braces on every
+       if/for/while), or the build fails. Fix with Rider's Reformat Code or
+       clang-format -i. Vendored code under external\ and VS's generated
+       resource.h are not checked. -->
+  <PropertyGroup>
+    <WinDVClangFormat>$(VCInstallDir)Tools\Llvm\x64\bin\clang-format.exe</WinDVClangFormat>
+    <WinDVCheckFormat Condition="'$(MSBuildProjectExtension)' == '.vcxproj' and !$(MSBuildProjectDirectory.Contains('\external\'))">true</WinDVCheckFormat>
+  </PropertyGroup>
+
+  <Target Name="WinDVCollectFormatFiles" Condition="'$(WinDVCheckFormat)' == 'true'">
+    <ItemGroup>
+      <WinDVFormatFile Include="@(ClCompile->'%(FullPath)');@(ClInclude->'%(FullPath)')" />
+      <WinDVFormatFile Remove="@(WinDVFormatFile)"
+                       Condition="$([System.String]::Copy('%(Identity)').ToLowerInvariant().Contains('\external\')) or '%(Filename)%(Extension)' == 'resource.h'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="WinDVCheckClangFormat"
+          Condition="'$(WinDVCheckFormat)' == 'true'"
+          DependsOnTargets="WinDVCollectFormatFiles"
+          BeforeTargets="ClCompile"
+          Inputs="@(WinDVFormatFile);$(MSBuildThisFileDirectory).clang-format"
+          Outputs="$(IntDir)clang-format.stamp">
+    <Message Importance="high" Condition="!Exists('$(WinDVClangFormat)')"
+             Text="clang-format not found at $(WinDVClangFormat): skipping the format check. Install the VS component 'C++ Clang tools for Windows'." />
+
+    <WriteLinesToFile Condition="Exists('$(WinDVClangFormat)')" File="$(IntDir)clang-format.files"
+                      Lines="@(WinDVFormatFile)" Overwrite="true" />
+    <Exec Condition="Exists('$(WinDVClangFormat)')"
+          Command="&quot;$(WinDVClangFormat)&quot; --dry-run -Werror --style=file &quot;--files=$(IntDir)clang-format.files&quot;"
+          IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true"
+          ConsoleToMSBuild="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="WinDVFormatExitCode" />
+      <Output TaskParameter="ConsoleOutput" ItemName="WinDVFormatOutput" />
+    </Exec>
+
+    <!-- "D:\x\File.cpp:12:5: error: code should be clang-formatted [...]": one error per
+         line clang-format complains about. (The Error task takes no line number.) -->
+    <ItemGroup>
+      <WinDVFormatError Include="@(WinDVFormatOutput)"
+                        Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '^.+:\d+:\d+: error: '))" />
+    </ItemGroup>
+    <Error Condition="'@(WinDVFormatError)' != ''" ContinueOnError="ErrorAndContinue" Code="FORMAT"
+           File="$([System.Text.RegularExpressions.Regex]::Replace('%(WinDVFormatError.Identity)', '^(.+):(\d+):(\d+): error: .*$', '$1'))"
+           Text="$([System.Text.RegularExpressions.Regex]::Replace('%(WinDVFormatError.Identity)', '^(.+):(\d+):(\d+): error: .*$', 'line $2, column $3')): not formatted as .clang-format requires (braces missing?). Run Reformat Code or clang-format -i." />
+    <Error Condition="Exists('$(WinDVClangFormat)') and '$(WinDVFormatExitCode)' != '0' and '@(WinDVFormatError)' == ''"
+           Text="clang-format failed (exit code $(WinDVFormatExitCode))." />
+
+    <Touch Condition="Exists('$(WinDVClangFormat)') and '$(WinDVFormatExitCode)' == '0'"
+           Files="$(IntDir)clang-format.stamp" AlwaysCreate="true" />
+  </Target>
+</Project>

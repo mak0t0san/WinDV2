@@ -28,10 +28,12 @@ public:
 
 		HRESULT GetMediaType(int position, CMediaType* pmt) override
 		{
-			if (position < 0)
+			if (position < 0) {
 				return E_INVALIDARG;
-			if (position > 0)
+			}
+			if (position > 0) {
 				return VFW_S_NO_MORE_ITEMS;
+			}
 			*pmt = Graph()->m_type;
 			return S_OK;
 		}
@@ -47,8 +49,9 @@ public:
 
 			ALLOCATOR_PROPERTIES actual{};
 			const HRESULT hr = allocator->SetProperties(request, &actual);
-			if (FAILED(hr))
+			if (FAILED(hr)) {
 				return hr;
+			}
 			return actual.cbBuffer < sampleSize ? E_FAIL : S_OK;
 		}
 
@@ -112,8 +115,9 @@ COutputGraph::COutputGraph(const CMediaType& type, int queueDepth) : m_type(type
 
 COutputGraph::~COutputGraph()
 {
-	if (m_MC)
+	if (m_MC) {
 		m_MC->Stop();
+	}
 }
 
 HRESULT COutputGraph::GetDeliveryBuffer(IMediaSample** sample)
@@ -141,8 +145,9 @@ void COutputGraph::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> fr
 {
 	CComPtr<IMediaSample> sample;
 	CheckHR(GetDeliveryBuffer(&sample), L"Can't get an output buffer");
-	if (frame.size() > static_cast<std::size_t>(sample->GetSize()))
+	if (frame.size() > static_cast<std::size_t>(sample->GetSize())) {
 		throw DShowError(L"DV frame is larger than the output buffer");
+	}
 
 	BYTE* data = nullptr;
 	CheckHR(sample->GetPointer(&data), L"Can't access the output buffer");
@@ -150,8 +155,9 @@ void COutputGraph::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> fr
 	sample->SetActualDataLength(static_cast<long>(frame.size()));
 
 	REFERENCE_TIME end = m_time + duration;
-	if (duration)
+	if (duration) {
 		sample->SetTime(&m_time, &end);
+	}
 	m_time = end;
 	sample->SetSyncPoint(TRUE);
 

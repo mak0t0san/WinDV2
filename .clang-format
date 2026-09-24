@@ -26,6 +26,10 @@ BraceWrapping:
   BeforeCatch: false
   SplitEmptyFunction: false
 
+# Braces on every if/else/for/while/do, even one-liners. Directory.Build.targets
+# fails the build when a file doesn't match this style.
+InsertBraces: true
+
 AllowShortFunctionsOnASingleLine: InlineOnly
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false

@@ -23,8 +23,9 @@ constexpr std::int32_t kQueueCapacity = 100;
 std::int32_t CopyOut(const std::wstring& text, wchar_t* buffer, std::int32_t length)
 {
 	const auto needed = static_cast<std::int32_t>(text.size() + 1);
-	if (buffer && length >= needed)
+	if (buffer && length >= needed) {
 		std::copy(text.c_str(), text.c_str() + needed, buffer);
+	}
 	return needed;
 }
 
@@ -47,8 +48,9 @@ struct windv_engine final : private DVEngineEvents {
 		windv_result result = WINDV_OK;
 		m_thread->Invoke([&] {
 			try {
-				if (!m_engine)
+				if (!m_engine) {
 					throw DShowError(L"The engine is not running");
+				}
 				action(*m_engine);
 			} catch (const DShowError& e) {
 				SetError(e.Message());
@@ -74,8 +76,9 @@ struct windv_engine final : private DVEngineEvents {
 	{
 		{
 			std::lock_guard lock(m_mutex);
-			if (!m_callError.empty())
+			if (!m_callError.empty()) {
 				return std::exchange(m_callError, {});
+			}
 		}
 		return m_engine ? m_engine->TakeError() : std::wstring();
 	}
@@ -122,8 +125,9 @@ private:
 	void OnError() override { Notify(WINDV_EVENT_ERROR); }
 	void Notify(windv_event event)
 	{
-		if (m_callback)
+		if (m_callback) {
 			m_callback(m_context, event);
+		}
 	}
 
 	HWND m_preview = nullptr;
@@ -156,8 +160,9 @@ windv_engine::windv_engine(HWND parent, windv_event_callback callback, void* con
 	// renderer's GDI/DirectDraw output. Needs Windows 8+ (layered child windows).
 	m_preview = CreateWindowExW(WS_EX_LAYERED, kPreviewClass, L"", WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, 0, 0,
 	                            0, 0, parent, nullptr, instance, nullptr);
-	if (!m_preview)
+	if (!m_preview) {
 		throw DShowError(L"Can't create the preview window", HRESULT_FROM_WIN32(GetLastError()));
+	}
 	SetLayeredWindowAttributes(m_preview, 0, 255, LWA_ALPHA); // fully opaque
 	SetWindowLongPtrW(m_preview, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
@@ -182,8 +187,9 @@ windv_engine::~windv_engine()
 
 void windv_engine::Tick()
 {
-	if (!m_engine)
+	if (!m_engine) {
 		return;
+	}
 
 	const DVEngine::State state = m_engine->GetState();
 	windv_status status{};
@@ -208,8 +214,9 @@ LRESULT CALLBACK windv_engine::PreviewProc(HWND hWnd, UINT message, WPARAM wPara
 	if (message == WM_SIZE) {
 		if (auto* self = reinterpret_cast<windv_engine*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA))) {
 			self->m_thread->Post([self] {
-				if (self->m_engine)
+				if (self->m_engine) {
 					self->m_engine->ResizePreview();
+				}
 			});
 		}
 	}
@@ -222,8 +229,9 @@ LRESULT CALLBACK windv_engine::PreviewProc(HWND hWnd, UINT message, WPARAM wPara
 WINDV_API windv_result WINDV_CALL windv_create(void* parentHwnd, windv_event_callback callback, void* context,
                                                windv_handle* engine)
 {
-	if (!engine || !parentHwnd)
+	if (!engine || !parentHwnd) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	*engine = nullptr;
 	try {
 		// Capture must keep up with the camcorder in real time.
@@ -243,18 +251,21 @@ WINDV_API void WINDV_CALL windv_destroy(windv_handle engine)
 WINDV_API windv_result WINDV_CALL windv_list_devices(windv_handle engine, wchar_t* buffer, std::int32_t length,
                                                      std::int32_t* needed)
 {
-	if (!engine || !needed)
+	if (!engine || !needed) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	std::wstring list;
 	const windv_result result = engine->Call([&](DVEngine&) {
 		for (const std::wstring& device : GetVideoDeviceList()) {
-			if (!list.empty())
+			if (!list.empty()) {
 				list += L'\n';
+			}
 			list += device;
 		}
 	});
-	if (result != WINDV_OK)
+	if (result != WINDV_OK) {
 		return result;
+	}
 	*needed = CopyOut(list, buffer, length);
 	return *needed > length ? WINDV_BUFFER_TOO_SMALL : WINDV_OK;
 }
@@ -262,14 +273,16 @@ WINDV_API windv_result WINDV_CALL windv_list_devices(windv_handle engine, wchar_
 WINDV_API void WINDV_CALL windv_preview_move(windv_handle engine, std::int32_t x, std::int32_t y, std::int32_t width,
                                              std::int32_t height)
 {
-	if (engine)
+	if (engine) {
 		engine->MovePreview(x, y, width, height);
+	}
 }
 
 WINDV_API void WINDV_CALL windv_set_options(windv_handle engine, const windv_options* options)
 {
-	if (!engine || !options || !engine->m_engine)
+	if (!engine || !options || !engine->m_engine) {
 		return;
+	}
 	DVEngine& e = *engine->m_engine;
 	e.m_type2AVI = options->type2AVI != 0;
 	e.m_discontinuityThreshold = (std::max)(0, options->discontinuityThreshold);
@@ -282,28 +295,32 @@ WINDV_API void WINDV_CALL windv_set_options(windv_handle engine, const windv_opt
 
 WINDV_API void WINDV_CALL windv_get_status(windv_handle engine, windv_status* status)
 {
-	if (engine && status)
+	if (engine && status) {
 		engine->GetStatus(status);
+	}
 }
 
 WINDV_API std::int32_t WINDV_CALL windv_take_error(windv_handle engine, wchar_t* buffer, std::int32_t length)
 {
-	if (!engine)
+	if (!engine) {
 		return 0;
+	}
 	return CopyOut(engine->TakeError(), buffer, length);
 }
 
 WINDV_API windv_result WINDV_CALL windv_reset(windv_handle engine)
 {
-	if (!engine)
+	if (!engine) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	return engine->Call([](DVEngine& e) { e.Destroy(); });
 }
 
 WINDV_API windv_result WINDV_CALL windv_build_capture(windv_handle engine, const wchar_t* device)
 {
-	if (!engine || !device)
+	if (!engine || !device) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	return engine->Call([&](DVEngine& e) { e.BuildCapturing(device); });
 }
 
@@ -311,11 +328,13 @@ WINDV_API windv_result WINDV_CALL windv_capture_start(windv_handle engine, const
                                                       const wchar_t* dateFormat, std::int32_t suffixDigits,
                                                       std::int64_t duration)
 {
-	if (!engine || !fileBase || !*fileBase)
+	if (!engine || !fileBase || !*fileBase) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	return engine->Call([&](DVEngine& e) {
-		if (e.GetState() != DVEngine::CapturePaused)
+		if (e.GetState() != DVEngine::CapturePaused) {
 			throw DShowError(L"The camcorder is not ready for capture");
+		}
 		e.StartCapturing(fileBase, Arg(dateFormat), std::clamp(suffixDigits, 0, 4),
 		                 (std::max)(duration, std::int64_t{0}));
 	});
@@ -323,36 +342,41 @@ WINDV_API windv_result WINDV_CALL windv_capture_start(windv_handle engine, const
 
 WINDV_API windv_result WINDV_CALL windv_capture_stop(windv_handle engine)
 {
-	if (!engine)
+	if (!engine) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	return engine->Call([](DVEngine& e) { e.StopCapturing(); });
 }
 
 WINDV_API windv_result WINDV_CALL windv_transport(windv_handle engine, std::int32_t command)
 {
-	if (!engine || command < WINDV_DECK_PLAY || command > WINDV_DECK_REWIND)
+	if (!engine || command < WINDV_DECK_PLAY || command > WINDV_DECK_REWIND) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	return engine->Call([&](DVEngine& e) { e.Transport(static_cast<windv::DeckCommand>(command)); });
 }
 
 WINDV_API windv_result WINDV_CALL windv_build_record(windv_handle engine, const wchar_t* files, const wchar_t* device)
 {
-	if (!engine || !files || !device)
+	if (!engine || !files || !device) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	return engine->Call([&](DVEngine& e) { e.BuildRecording(files, device); });
 }
 
 WINDV_API windv_result WINDV_CALL windv_record_start(windv_handle engine)
 {
-	if (!engine)
+	if (!engine) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	return engine->Call([](DVEngine& e) { e.StartRecording(); });
 }
 
 WINDV_API windv_result WINDV_CALL windv_record_stop(windv_handle engine)
 {
-	if (!engine)
+	if (!engine) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 	return engine->Call([](DVEngine& e) { e.StopRecording(); });
 }
 
@@ -360,16 +384,19 @@ WINDV_API windv_result WINDV_CALL windv_parse_command_line(const wchar_t* const*
                                                            windv_command_line* result, wchar_t* files,
                                                            std::int32_t length, std::int32_t* needed)
 {
-	if (!result || !needed || count < 0 || (count > 0 && !args))
+	if (!result || !needed || count < 0 || (count > 0 && !args)) {
 		return WINDV_INVALID_ARGUMENT;
+	}
 
 	std::vector<std::wstring> argv;
-	for (std::int32_t i = 0; i < count; ++i)
+	for (std::int32_t i = 0; i < count; ++i) {
 		argv.push_back(Arg(args[i]));
+	}
 
 	const auto parsed = windv::ParseCommandLine(argv);
-	if (!parsed)
+	if (!parsed) {
 		return WINDV_USAGE_ERROR;
+	}
 
 	result->mode = static_cast<std::int32_t>(parsed->mode);
 	result->exitOnFinish = parsed->exitOnFinish ? 1 : 0;
@@ -377,8 +404,9 @@ WINDV_API windv_result WINDV_CALL windv_parse_command_line(const wchar_t* const*
 
 	std::wstring text = parsed->captureFile;
 	for (const std::wstring& file : parsed->recordFiles) {
-		if (!text.empty())
+		if (!text.empty()) {
 			text += L" | ";
+		}
 		text += file;
 	}
 	*needed = CopyOut(text, files, length);

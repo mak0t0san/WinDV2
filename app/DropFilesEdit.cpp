@@ -22,20 +22,24 @@ void CDropFilesEdit::OnDropFiles(HDROP hDropInfo)
 	CString files;
 	for (UINT i = 0; i < count; ++i) {
 		const UINT length = DragQueryFile(hDropInfo, i, nullptr, 0);
-		if (length == 0)
+		if (length == 0) {
 			continue;
+		}
 		CString file;
 		DragQueryFile(hDropInfo, i, file.GetBuffer(static_cast<int>(length) + 1), length + 1);
 		file.ReleaseBuffer();
 
-		if (m_filter && !m_filter(file))
+		if (m_filter && !m_filter(file)) {
 			continue;
-		if (!files.IsEmpty())
+		}
+		if (!files.IsEmpty()) {
 			files += m_separator;
+		}
 		files += file;
 	}
 	DragFinish(hDropInfo);
 
-	if (!files.IsEmpty())
+	if (!files.IsEmpty()) {
 		SetWindowText(files);
+	}
 }

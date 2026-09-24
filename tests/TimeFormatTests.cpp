@@ -57,7 +57,8 @@ TEST_CASE("Modified conversions are accepted where the UCRT allows them")
 TEST_CASE("Long output is not truncated")
 {
 	std::wstring format;
-	for (int i = 0; i < 200; ++i)
+	for (int i = 0; i < 200; ++i) {
 		format += L"%Y";
+	}
 	CHECK(FormatTime(format, MakeLocal(2004, 7, 15, 0, 0, 0)).size() == 800);
 }

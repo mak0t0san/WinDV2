@@ -45,10 +45,16 @@ public static class UpdateChecker
     {
         version = null;
         if (string.IsNullOrEmpty(text))
+        {
             return false;
+        }
+
         string core = text.TrimStart('v', 'V').Split('-', '+')[0];
         if (!Version.TryParse(core, out Version? parsed))
+        {
             return false;
+        }
+
         version = Normalize(parsed);
         return true;
     }

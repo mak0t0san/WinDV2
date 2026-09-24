@@ -20,7 +20,9 @@ public sealed partial class SettingsView : UserControl
     {
         InitializeComponent();
         for (int i = 0; i <= MaxSuffixDigits; i++)
+        {
             DigitsBox.Items.Add(i.ToString());
+        }
     }
 
     public event EventHandler<SettingsClosedEventArgs>? Closed;
@@ -30,9 +32,9 @@ public sealed partial class SettingsView : UserControl
         _settings = settings;
         DeckControlSwitch.IsOn = settings.DeckControl;
 
-        AviTypeButtons.SelectedIndex = settings.Type2AVI ? 1 : 0;
+        AviTypeButtons.SelectedIndex = settings.Type2Avi ? 1 : 0;
         ThresholdBox.Value = settings.DiscontinuityThreshold;
-        MaxFramesBox.Value = settings.MaxAVIFrames;
+        MaxFramesBox.Value = settings.MaxAviFrames;
         EveryNthBox.Value = settings.EveryNth;
         SignalLossSwitch.IsOn = settings.SignalLossSeconds > 0;
         SignalLossBox.Value = settings.SignalLossSeconds > 0
@@ -43,15 +45,21 @@ public sealed partial class SettingsView : UserControl
         DateFormatBox.Items.Clear();
         DateFormatBox.Items.Add(settings.DateTimeFormat);
         foreach (string format in settings.DateTimeFormatHistory.Where(f => f != settings.DateTimeFormat))
+        {
             DateFormatBox.Items.Add(format);
+        }
+
         if (settings.DateTimeFormat.Length > 0)
+        {
             DateFormatBox.Items.Add(""); // offer "no date in the name"
+        }
+
         DateFormatBox.Text = settings.DateTimeFormat;
         DateFormatBox.SelectedIndex = 0;
         DigitsBox.SelectedIndex = Math.Clamp(settings.SuffixDigits, 0, MaxSuffixDigits);
 
-        PrefixBox.Text = settings.AVIPrefix;
-        SuffixBox.Text = settings.AVISuffix;
+        PrefixBox.Text = settings.AviPrefix;
+        SuffixBox.Text = settings.AviSuffix;
         RecordPreviewSwitch.IsOn = settings.RecordPreview;
         UpdateCheckSwitch.IsOn = settings.CheckForUpdates;
 
@@ -71,7 +79,10 @@ public sealed partial class SettingsView : UserControl
     private void DateFormatBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (DateFormatBox.SelectedItem is string format)
+        {
             DateFormatBox.Text = format;
+        }
+
         UpdateExample();
     }
 
@@ -84,44 +95,53 @@ public sealed partial class SettingsView : UserControl
     private void UpdateExample()
     {
         string format = CurrentFormat;
-        if (!DVEngine.IsValidTimeFormat(format))
+        if (!DvEngine.IsValidTimeFormat(format))
         {
             ExampleText.Text = "(the date format has an invalid % code)";
             return;
         }
         string example = "capture";
-        string date = DVEngine.FormatNow(format);
+        string date = DvEngine.FormatNow(format);
         if (date.Length > 0)
+        {
             example += "." + date;
+        }
+
         int digits = Math.Max(DigitsBox.SelectedIndex, 0);
         if (digits > 0)
+        {
             example += "." + new string('0', digits);
+        }
+
         ExampleText.Text = example + ".avi";
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         if (_settings is null)
+        {
             return;
+        }
+
         string format = CurrentFormat;
-        if (!DVEngine.IsValidTimeFormat(format))
+        if (!DvEngine.IsValidTimeFormat(format))
         {
             ValidationText.Text = "The date format has an invalid % code.";
             return;
         }
 
         _settings.DeckControl = DeckControlSwitch.IsOn;
-        _settings.Type2AVI = AviTypeButtons.SelectedIndex == 1;
+        _settings.Type2Avi = AviTypeButtons.SelectedIndex == 1;
         _settings.DiscontinuityThreshold = ReadNumber(ThresholdBox, 0, _settings.DiscontinuityThreshold);
-        _settings.MaxAVIFrames = ReadNumber(MaxFramesBox, 10, _settings.MaxAVIFrames);
+        _settings.MaxAviFrames = ReadNumber(MaxFramesBox, 10, _settings.MaxAviFrames);
         _settings.EveryNth = ReadNumber(EveryNthBox, 1, _settings.EveryNth);
         _settings.SignalLossSeconds = SignalLossSwitch.IsOn
             ? Math.Min(ReadNumber(SignalLossBox, 1, SettingsStore.DefaultSignalLossSeconds), 3600)
             : 0;
         _settings.UseDateTimeFormat(format);
         _settings.SuffixDigits = Math.Max(DigitsBox.SelectedIndex, 0);
-        _settings.AVIPrefix = PrefixBox.Text.Trim();
-        _settings.AVISuffix = SuffixBox.Text.Trim();
+        _settings.AviPrefix = PrefixBox.Text.Trim();
+        _settings.AviSuffix = SuffixBox.Text.Trim();
         _settings.RecordPreview = RecordPreviewSwitch.IsOn;
         _settings.CheckForUpdates = UpdateCheckSwitch.IsOn;
 

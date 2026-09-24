@@ -16,8 +16,9 @@ void WaitPumpingSentMessages(HANDLE event)
 {
 	for (;;) {
 		const DWORD result = MsgWaitForMultipleObjectsEx(1, &event, INFINITE, QS_SENDMESSAGE, 0);
-		if (result != WAIT_OBJECT_0 + 1)
+		if (result != WAIT_OBJECT_0 + 1) {
 			return; // signalled (or failed: don't spin)
+		}
 		MSG msg;
 		PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
 	}
@@ -37,8 +38,9 @@ void DispatchPendingMessages()
 EngineThread::EngineThread(std::function<void()> tick)
     : m_tick(std::move(tick)), m_wake(CreateEventW(nullptr, FALSE, FALSE, nullptr))
 {
-	if (!m_wake)
+	if (!m_wake) {
 		throw DShowError(L"Can't create the engine thread's event", HRESULT_FROM_WIN32(GetLastError()));
+	}
 	m_thread = std::jthread([this](std::stop_token stop) { Run(stop); });
 }
 
@@ -46,8 +48,9 @@ EngineThread::~EngineThread()
 {
 	m_thread.request_stop();
 	SetEvent(m_wake);
-	if (m_thread.joinable())
+	if (m_thread.joinable()) {
 		m_thread.join();
+	}
 	CloseHandle(m_wake);
 }
 
@@ -77,18 +80,20 @@ void EngineThread::Invoke(const std::function<void()>& task)
 		task();
 		SetEvent(done);
 	});
-	if (IsGUIThread(FALSE))
+	if (IsGUIThread(FALSE)) {
 		WaitPumpingSentMessages(done);
-	else
+	} else {
 		WaitForSingleObject(done, INFINITE);
+	}
 	CloseHandle(done);
 }
 
 std::function<void()> EngineThread::TakeTask()
 {
 	std::lock_guard lock(m_mutex);
-	if (m_tasks.empty())
+	if (m_tasks.empty()) {
 		return {};
+	}
 	std::function<void()> task = std::move(m_tasks.front());
 	m_tasks.pop_front();
 	return task;
@@ -108,14 +113,16 @@ void EngineThread::Run(std::stop_token stop)
 			task();
 			DispatchPendingMessages();
 		}
-		if (stop.stop_requested())
+		if (stop.stop_requested()) {
 			return; // all queued work is done
+		}
 
 		DispatchPendingMessages();
 		const ULONGLONG now = GetTickCount64();
 		if (now >= nextTick) {
-			if (m_tick)
+			if (m_tick) {
 				m_tick();
+			}
 			nextTick = now + kTickIntervalMs;
 		}
 
