@@ -45,7 +45,8 @@ CString FormatMessageWithResult(const CString& message, HRESULT hr)
 	if (description.IsEmpty())
 		result.Format(L"%s (0x%08lX)", message.GetString(), static_cast<unsigned long>(hr));
 	else
-		result.Format(L"%s (0x%08lX: %s)", message.GetString(), static_cast<unsigned long>(hr), description.GetString());
+		result.Format(L"%s (0x%08lX: %s)", message.GetString(), static_cast<unsigned long>(hr),
+		              description.GetString());
 	return result;
 }
 
@@ -58,7 +59,7 @@ void SetDVDecoding(IGraphBuilder* graph, bool fullResolution)
 		dvDec->put_IPDisplay(fullResolution ? DVDECODERRESOLUTION_720x480 : DVDECODERRESOLUTION_360x240);
 }
 
-// Calls visit(friendlyName, moniker) for every video capture device.
+// Calls visit(friendlyName, moniker, bindContext) for every video capture device
 template <typename Visitor>
 void ForEachVideoDevice(Visitor&& visit)
 {
@@ -71,13 +72,16 @@ void ForEachVideoDevice(Visitor&& visit)
 	if (hr != S_OK) // S_FALSE: the category is empty
 		return;
 
+	CComPtr<IBindCtx> bindContext;
+	CheckHR(CreateBindCtx(0, &bindContext), L"Can't create a bind context");
+
 	CComPtr<IMoniker> moniker;
 	while (monikers->Next(1, &moniker, nullptr) == S_OK) {
 		CComPtr<IPropertyBag> bag;
-		if (SUCCEEDED(moniker->BindToStorage(nullptr, nullptr, IID_PPV_ARGS(&bag)))) {
+		if (SUCCEEDED(moniker->BindToStorage(bindContext, nullptr, IID_PPV_ARGS(&bag)))) {
 			CComVariant name;
 			if (SUCCEEDED(bag->Read(L"FriendlyName", &name, nullptr)) && name.vt == VT_BSTR) {
-				if (!visit(CString(name.bstrVal), moniker.p))
+				if (!visit(CString(name.bstrVal), moniker.p, bindContext.p))
 					return;
 			}
 		}
@@ -88,10 +92,10 @@ void ForEachVideoDevice(Visitor&& visit)
 CComPtr<IBaseFilter> FindVideoDevice(const CString& device)
 {
 	CComPtr<IBaseFilter> filter;
-	ForEachVideoDevice([&](const CString& name, IMoniker* moniker) {
+	ForEachVideoDevice([&](const CString& name, IMoniker* moniker, IBindCtx* bindContext) {
 		if (name != device)
 			return true;
-		CheckHR(moniker->BindToObject(nullptr, nullptr, IID_PPV_ARGS(&filter)), L"Can't open the video device");
+		CheckHR(moniker->BindToObject(bindContext, nullptr, IID_PPV_ARGS(&filter)), L"Can't open the video device");
 		return false;
 	});
 	if (!filter)
@@ -123,9 +127,10 @@ CString NextCaptureFilename(const CString& base, const CString& dtformat, int nd
 
 DShowError::DShowError(const CString& message, HRESULT hr, Cause cause)
     : std::runtime_error(CStringA(FormatMessageWithResult(message, hr)).GetString()),
-      m_message(FormatMessageWithResult(message, hr)), m_hr(hr), m_cause(cause)
-{
-}
+      m_message(FormatMessageWithResult(message, hr)),
+      m_hr(hr),
+      m_cause(cause)
+{}
 
 void CheckHR(HRESULT hr, LPCWSTR what)
 {
@@ -142,7 +147,7 @@ void CheckSucceeded(HRESULT hr, LPCWSTR what)
 std::vector<CString> GetVideoDeviceList()
 {
 	std::vector<CString> list;
-	ForEachVideoDevice([&](const CString& name, IMoniker*) {
+	ForEachVideoDevice([&](const CString& name, IMoniker*, IBindCtx*) {
 		list.push_back(name);
 		return true;
 	});
@@ -190,8 +195,7 @@ public:
 	public:
 		CInputPin(CInputFilter* filter, CCritSec* lock, HRESULT* phr)
 		    : CBaseInputPin(NAME("Input"), filter, lock, phr, L"Input")
-		{
-		}
+		{}
 
 		HRESULT CheckMediaType(const CMediaType* pmt) override
 		{
@@ -319,8 +323,7 @@ public:
 	public:
 		COutputPin(COutputFilter* filter, CCritSec* lock, HRESULT* phr)
 		    : CBaseOutputPin(NAME("Output"), filter, lock, phr, L"Output")
-		{
-		}
+		{}
 
 		HRESULT GetMediaType(int position, CMediaType* pmt) override
 		{
@@ -958,6 +961,18 @@ void CDV::SourceError(const CString& message)
 	m_queue->Close();
 }
 
+// The preview is optional: without a working DV decoder, capture and record
+// still run, just without a picture.
+void CDV::CreateMonitor(const CMediaType& type)
+{
+	try {
+		m_monitor = std::make_unique<CMonitor>(m_hWnd, type);
+	} catch (const DShowError& e) {
+		TRACE(L"Preview disabled: %s\n", e.Message().GetString());
+		m_monitor.reset();
+	}
+}
+
 void CDV::StartWorker(void (CDV::*worker)(std::stop_token))
 {
 	m_thread = std::jthread([this, worker](std::stop_token stop) { (this->*worker)(stop); });
@@ -974,7 +989,7 @@ void CDV::BuildCapturing(const CString& device)
 	CMediaType type;
 	m_dvInput->GetMediaType(&type);
 
-	m_monitor = std::make_unique<CMonitor>(m_hWnd, type);
+	CreateMonitor(type);
 	m_queue = std::make_unique<windv::FrameQueue>(kQueueFrames, type.GetSampleSize());
 
 	m_state = CapturePaused;
@@ -1017,7 +1032,7 @@ void CDV::BuildRecording(const CString& filenames, const CString& device)
 	CMediaType type;
 	m_aviJoiner->GetMediaType(&type);
 
-	m_monitor = std::make_unique<CMonitor>(m_hWnd, type);
+	CreateMonitor(type);
 	m_dvOutput = std::make_unique<CDVOutput>(device, type);
 	m_queue = std::make_unique<windv::FrameQueue>(kQueueFrames, type.GetSampleSize());
 
@@ -1089,7 +1104,8 @@ void CDV::CaptureLoop()
 		if (newDVTime != dvTime) {
 			if (newDVTime > 0) {
 				if (lastValidDVTime > 0)
-					deltaDVTime = newDVTime > lastValidDVTime ? newDVTime - lastValidDVTime : lastValidDVTime - newDVTime;
+					deltaDVTime =
+					    newDVTime > lastValidDVTime ? newDVTime - lastValidDVTime : lastValidDVTime - newDVTime;
 				lastValidDVTime = newDVTime;
 			}
 			dvTime = newDVTime;
@@ -1097,7 +1113,7 @@ void CDV::CaptureLoop()
 		}
 
 		// Only preview while the queue is draining comfortably.
-		if (m_queue->Load() < m_queue->Capacity() / 2)
+		if (m_monitor && m_queue->Load() < m_queue->Capacity() / 2)
 			m_monitor->HandleFrame(frame->duration, frame->data);
 
 		if (m_state == Capturing) {
@@ -1175,7 +1191,7 @@ void CDV::RecordLoop()
 			dvTime = newDVTime;
 			NotifyTimeChange(dvTime);
 		}
-		if (m_recordPreview && (m_queue->IsClosed() || m_queue->Load() > m_queue->Capacity() / 2))
+		if (m_monitor && m_recordPreview && (m_queue->IsClosed() || m_queue->Load() > m_queue->Capacity() / 2))
 			m_monitor->HandleFrame(frame->duration, frame->data);
 
 		m_dvOutput->HandleFrame(frame->duration, frame->data);

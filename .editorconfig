@@ -1,0 +1,34 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cpp,h}]
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
+# Resource script: Visual Studio's resource editor owns this format and the
+# Czech string table relies on code page 1250, so leave encoding alone.
+[*.{rc,rc2}]
+charset = unset
+indent_style = unset
+
+[*.{vcxproj,props,targets,xml,manifest}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# Vendored code keeps its upstream formatting.
+[external/**]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset

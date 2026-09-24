@@ -8,10 +8,12 @@
 namespace windv {
 
 FrameQueue::FrameQueue(std::size_t capacity, std::size_t frameSize)
-    : m_capacity(std::max<std::size_t>(capacity, 1)), m_frameSize(frameSize), m_slotCount(m_capacity + 1),
-      m_storage(m_slotCount * frameSize), m_slots(m_slotCount)
-{
-}
+    : m_capacity(std::max<std::size_t>(capacity, 1)),
+      m_frameSize(frameSize),
+      m_slotCount(m_capacity + 1),
+      m_storage(m_slotCount * frameSize),
+      m_slots(m_slotCount)
+{}
 
 bool FrameQueue::Put(std::int64_t duration, std::span<const std::uint8_t> data)
 {

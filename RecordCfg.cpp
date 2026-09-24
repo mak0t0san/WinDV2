@@ -8,7 +8,8 @@
 #define new DEBUG_NEW
 #endif
 
-CRecordCfg::CRecordCfg() : CPropertyPage(IDD), m_aviSuffixCtl(L" | "), m_aviPrefixCtl(L" | ") {}
+CRecordCfg::CRecordCfg() : CPropertyPage(IDD), m_aviSuffixCtl(L" | "), m_aviPrefixCtl(L" | ")
+{}
 
 void CRecordCfg::DoDataExchange(CDataExchange* pDX)
 {

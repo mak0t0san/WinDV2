@@ -55,7 +55,7 @@ TEST_CASE("With zero digits the first capture is unnumbered")
 TEST_CASE("Unrelated files are ignored")
 {
 	const std::vector<std::wstring> existing = {
-	    L"tape2.05.avi", L"tape.xx.avi", L"tape.05.avi.bak", L"tape..avi", L"tape.5a.avi", L"other.07.avi",
+	    L"tape2.05.avi",        L"tape.xx.avi", L"tape.05.avi.bak", L"tape..avi", L"tape.5a.avi", L"other.07.avi",
 	    L"tape.1234567890.avi", // too long to be one of ours
 	};
 	CHECK(Next(L"tape", 2, existing) == L"tape.00.avi");

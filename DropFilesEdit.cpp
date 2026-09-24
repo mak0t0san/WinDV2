@@ -9,8 +9,7 @@
 
 CDropFilesEdit::CDropFilesEdit(LPCWSTR multidropSeparator, Filter filter)
     : m_separator(multidropSeparator), m_filter(filter)
-{
-}
+{}
 
 BEGIN_MESSAGE_MAP(CDropFilesEdit, CEdit)
 	ON_WM_DROPFILES()

@@ -10,8 +10,7 @@
 
 CVideoDeviceSel::CVideoDeviceSel(const std::vector<CString>& devices, const CString& selected, CWnd* pParent)
     : CDialog(IDD, pParent), m_devices(devices), m_selName(selected)
-{
-}
+{}
 
 void CVideoDeviceSel::DoDataExchange(CDataExchange* pDX)
 {

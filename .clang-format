@@ -1,0 +1,44 @@
+# Formatting for WinDV's own sources (vendored code under external/ opts out).
+# Run with the clang-format that ships with Visual Studio:
+#   VC\Tools\Llvm\x64\bin\clang-format.exe -i <files>
+BasedOnStyle: LLVM
+Standard: c++20
+
+UseTab: ForIndentation
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 120
+AccessModifierOffset: -4
+IndentCaseLabels: false
+NamespaceIndentation: None
+FixNamespaceComments: true
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterClass: false
+  AfterStruct: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterNamespace: false
+  BeforeElse: false
+  BeforeCatch: false
+  SplitEmptyFunction: false
+
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortLambdasOnASingleLine: All
+AlwaysBreakTemplateDeclarations: Yes
+PointerAlignment: Left
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: NextLine
+
+# stdafx.h must stay the first include; keep includes in the order written.
+SortIncludes: Never
+IncludeBlocks: Preserve
+
+# Indent MFC message-map entries like a block.
+MacroBlockBegin: "^BEGIN_MESSAGE_MAP$"
+MacroBlockEnd: "^END_MESSAGE_MAP$"

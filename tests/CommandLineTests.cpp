@@ -37,8 +37,8 @@ TEST_CASE("Duration fractions are in fractions of a second")
 
 TEST_CASE("Malformed durations are rejected")
 {
-	for (const wchar_t* text : {L"", L"abc", L"1:", L":30", L"1::2", L"1:2:3:4", L"1.2.3", L"1.x", L"-5", L"1 ",
-	                            L"1234567890"}) {
+	for (const wchar_t* text :
+	     {L"", L"abc", L"1:", L":30", L"1::2", L"1:2:3:4", L"1.2.3", L"1.x", L"-5", L"1 ", L"1234567890"}) {
 		CAPTURE(std::wstring(text));
 		CHECK_FALSE(ParseDuration(text).has_value());
 	}

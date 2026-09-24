@@ -284,14 +284,17 @@ void CDVToolsDlg::LoadSettings()
 	m_video.m_type2AVI = app->GetProfileInt(L"Capture", L"Type2AVI", m_video.m_type2AVI ? 1 : 0) > 0;
 	// "Treshold" is misspelt in the registry since WinDV 1.0; kept for compatibility.
 	m_video.m_discontinuityThreshold =
-	    (std::max)(0, static_cast<int>(app->GetProfileInt(L"Capture", L"DiscontinuityTreshold", m_video.m_discontinuityThreshold)));
-	m_video.m_maxAVIFrames = (std::max)(10, static_cast<int>(app->GetProfileInt(L"Capture", L"MaxAVIFrames", m_video.m_maxAVIFrames)));
-	m_video.m_everyNth = (std::max)(1, static_cast<int>(app->GetProfileInt(L"Capture", L"EveryNth", m_video.m_everyNth)));
+	    (std::max)(0, static_cast<int>(
+	                      app->GetProfileInt(L"Capture", L"DiscontinuityTreshold", m_video.m_discontinuityThreshold)));
+	m_video.m_maxAVIFrames =
+	    (std::max)(10, static_cast<int>(app->GetProfileInt(L"Capture", L"MaxAVIFrames", m_video.m_maxAVIFrames)));
+	m_video.m_everyNth =
+	    (std::max)(1, static_cast<int>(app->GetProfileInt(L"Capture", L"EveryNth", m_video.m_everyNth)));
 
 	m_DTFormat = app->GetProfileString(L"Capture", L"DateTimeFormat", L"%y-%m-%d_%H-%M");
-	m_DTFormatHistory = app->GetProfileString(
-	    L"Capture", L"DateTimeFormatHistory",
-	    L"%y-%m-%d_%H-%M-%S\n%Y-%m-%d_%H-%M\n%Y-%m-%d_%H-%M-%S\n%Y%m%d-%H%M%S\n%a_%H-%M-%S");
+	m_DTFormatHistory =
+	    app->GetProfileString(L"Capture", L"DateTimeFormatHistory",
+	                          L"%y-%m-%d_%H-%M-%S\n%Y-%m-%d_%H-%M\n%Y-%m-%d_%H-%M-%S\n%Y%m%d-%H%M%S\n%a_%H-%M-%S");
 	m_nSuffixDigits = std::clamp(static_cast<int>(app->GetProfileInt(L"Capture", L"SuffixDigits", 2)), 0, 4);
 }
 

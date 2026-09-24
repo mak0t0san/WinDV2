@@ -298,6 +298,7 @@ private:
 	void ReportError(const CString& message);
 	void NotifyTimeChange(std::time_t dvTime);
 	void StartWorker(void (CDV::*worker)(std::stop_token));
+	void CreateMonitor(const CMediaType& type);
 
 	std::atomic<State> m_state{Idle};
 	HWND m_notifyWnd = nullptr;

@@ -18,7 +18,8 @@ constexpr int kMaxSuffixDigits = 4;
 
 } // namespace
 
-CCaptureCfg::CCaptureCfg() : CPropertyPage(IDD) {}
+CCaptureCfg::CCaptureCfg() : CPropertyPage(IDD)
+{}
 
 void CCaptureCfg::DoDataExchange(CDataExchange* pDX)
 {
