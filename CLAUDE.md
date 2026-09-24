@@ -23,7 +23,12 @@ with the DLL copied next to it. Build order: `baseclasses`, `WinDVCore` and `Win
 `WinDVLauncher` (`launcher/`) has no dependencies.
 
 Release packaging is `build\package.ps1 -Arch x64|x86` (CI uses it too). It writes an Inno
-Setup installer (`installer/WinDV.iss`) and a portable zip to `dist\`. The zip's top level
+Setup installer (`installer/WinDV.iss`) and a portable zip to `dist\`. It ships a
+**Native AOT publish** of `ui/` (`PublishAot`), not the build output, so the UI must stay
+trim/AOT-safe: `x:Bind` rather than `{Binding}`, `LibraryImport`, no reflection. Keep
+`EnableMsixTooling=true`, because without it the publish silently drops `WinDV.pri`
+and the app crashes on start. The AOT linker finds the C++ tools through `vswhere.exe`
+on PATH, which this machine doesn't have, so `package.ps1` adds it. The zip's top level
 holds only `WinDVLauncher.exe` renamed to `WinDV.exe`, plus README. The app stays in
 `app\`, because it must sit next to its runtime DLLs. The installer's uninstall must never
 remove `HKCU\Software\Petr Mourek` (see Gotchas).

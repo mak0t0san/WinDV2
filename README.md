@@ -97,8 +97,11 @@ app needs anything installed.
 
 ### Packaging a release
 
-After a Release build of a platform, [`build/package.ps1`](build/package.ps1) writes the
-two downloads to `dist\`. The installer needs Inno Setup 6
+After a Release build of a platform, [`build/package.ps1`](build/package.ps1) publishes
+the WinUI app as Native AOT and writes the two downloads to `dist\`. AOT compiles the C#
+app into one native `WinDV.exe`, so .NET's runtime isn't shipped, and only WinUI's
+English resources are kept. That makes the app about 60 MB instead of 170 MB. A normal
+build still runs on the JIT. The installer needs Inno Setup 6
 (`winget install JRSoftware.InnoSetup`), and `-NoInstaller` builds only the zip.
 
 ```powershell

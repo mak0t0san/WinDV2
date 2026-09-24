@@ -3,7 +3,8 @@
     Packages a built WinDV for release: a portable zip and an installer.
 
 .DESCRIPTION
-    Run after building WinDV.sln (Release) for the same platform. Produces, in -OutDir:
+    Run after building WinDV.sln (Release) for the same platform. Publishes the WinUI
+    app as Native AOT (ui\WinDV.csproj) and produces, in -OutDir:
 
       WinDV-<version>-<arch>-portable.zip
           WinDV-<version>-<arch>\WinDV.exe    launcher (launcher\), starts app\WinDV.exe
@@ -35,10 +36,18 @@ if (-not $Version) {
 # 2.1.0-0123abcd -> 2.1.0 for version resources.
 $fileVersion = ($Version -split '[-+]')[0]
 
-$appOut = "$root\ui\bin\$Arch\Release\net10.0-windows10.0.26100.0\win-$Arch"
 $launcher = "$root\$platform\Release\WinDVLauncher.exe"
-foreach ($path in "$appOut\WinDV.exe", $launcher) {
-    if (-not (Test-Path $path)) { throw "$path not found. Build WinDV.sln (Release|$platform) first." }
+if (-not (Test-Path $launcher)) { throw "$launcher not found. Build WinDV.sln (Release|$platform) first." }
+
+$msbuild = (Get-Command MSBuild.exe -ErrorAction SilentlyContinue).Source
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+if (-not $msbuild -and (Test-Path $vswhere)) {
+    $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+}
+if (-not $msbuild) { throw 'MSBuild.exe not found. Run from a VS developer prompt or install Visual Studio 2026.' }
+# The AOT linker finds the C++ tools through vswhere.exe, which it expects on PATH.
+if ((Test-Path $vswhere) -and -not (Get-Command vswhere.exe -ErrorAction SilentlyContinue)) {
+    $env:Path = "$(Split-Path $vswhere);$env:Path"
 }
 
 if (-not [IO.Path]::IsPathRooted($OutDir)) { $OutDir = Join-Path $root $OutDir }
@@ -48,7 +57,9 @@ if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force "$stage\app" | Out-Null
 
 # The app, without debug symbols.
-Copy-Item "$appOut\*" "$stage\app" -Recurse
+& $msbuild "$root\ui\WinDV.csproj" /t:Publish /nologo /v:m /p:Configuration=Release `
+    "/p:Platform=$Arch" "/p:Version=$Version" "/p:PublishDir=$stage\app\"
+if ($LASTEXITCODE -ne 0) { throw "Publishing the app failed with exit code $LASTEXITCODE." }
 Get-ChildItem "$stage\app" -Recurse -Filter *.pdb | Remove-Item
 
 # Portable zip: only the launcher and README at the top level.
