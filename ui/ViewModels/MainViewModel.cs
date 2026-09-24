@@ -23,11 +23,19 @@ public enum Tool
 public sealed partial class MainViewModel : ObservableObject
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(200);
+    // A camcorder arrives as several device interfaces, and the driver needs a
+    // moment before the graph can be built.
+    private static readonly TimeSpan DeviceSettleTime = TimeSpan.FromSeconds(1.5);
 
     private readonly SettingsStore _settings;
+    private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherQueueTimer _timer;
+    private readonly DispatcherQueueTimer _deviceTimer;
     private readonly SemaphoreSlim _busy = new(1, 1);
-    private DVEngine? _engine;
+    private readonly HashSet<string> _presentDevices = [];
+    private DeviceChangeWatcher? _deviceWatcher;
+    private bool _waitingForDevice;
+    private DvEngine? _engine;
     private EngineStatus _status;
     private bool _exitOnFinish;
     private bool _suppressToolChange;
@@ -48,9 +56,14 @@ public sealed partial class MainViewModel : ObservableObject
         UpdateTitle = "";
         UpdateUri = new Uri(Views.AboutDialog.ProjectUrl);
 
+        _dispatcher = dispatcher;
         _timer = dispatcher.CreateTimer();
         _timer.Interval = PollInterval;
         _timer.Tick += (_, _) => UpdateStatus();
+        _deviceTimer = dispatcher.CreateTimer();
+        _deviceTimer.Interval = DeviceSettleTime;
+        _deviceTimer.IsRepeating = false;
+        _deviceTimer.Tick += (_, _) => _ = OnDevicesChangedAsync();
     }
 
     /// <summary>The window should close (a command-line run has finished).</summary>
@@ -130,17 +143,22 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsCaptureTool => SelectedTool == Tool.Capture;
     public bool IsRecordTool => SelectedTool == Tool.Record;
 
-    public void Attach(DVEngine engine)
+    public void Attach(DvEngine engine)
     {
         _engine = engine;
         _engine.Error += (_, message) => _ = OnEngineErrorAsync(message);
-        _engine.DVTimeChanged += (_, _) => UpdateStatus();
+        _engine.DvTimeChanged += (_, _) => UpdateStatus();
+        _deviceWatcher = new DeviceChangeWatcher(_dispatcher);
+        _deviceWatcher.Changed += (_, _) => RestartDeviceTimer();
         _timer.Start();
     }
 
     public void Detach()
     {
         _timer.Stop();
+        _deviceTimer.Stop();
+        _deviceWatcher?.Dispose();
+        _deviceWatcher = null;
         _settings.SelectedTool = (int)SelectedTool;
         _settings.CaptureDevice = CaptureDevice;
         _settings.RecordDevice = RecordDevice;
@@ -189,11 +207,16 @@ public sealed partial class MainViewModel : ObservableObject
     public async Task ShutdownAsync()
     {
         if (_engine is null)
+        {
             return;
+        }
+
         try
         {
             if (IsCaptureTool && CanControlDeck && _settings.DeckControl)
+            {
                 await _engine.TransportAsync(DeckCommand.Stop);
+            }
         }
         catch (EngineException)
         {
@@ -205,7 +228,10 @@ public sealed partial class MainViewModel : ObservableObject
     public async Task RefreshDevicesAsync()
     {
         if (_engine is null)
+        {
             return;
+        }
+
         string[] devices;
         try
         {
@@ -218,14 +244,21 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         string capture = CaptureDevice, record = RecordDevice;
+        _presentDevices.Clear();
+        _presentDevices.UnionWith(devices);
         Devices.Clear();
         foreach (string device in devices)
+        {
             Devices.Add(device);
+        }
+
         // Keep the saved choices selectable even while the device is unplugged.
         foreach (string saved in new[] { capture, record })
         {
             if (saved.Length > 0 && !Devices.Contains(saved))
+            {
                 Devices.Add(saved);
+            }
         }
         CaptureDevice = capture;
         RecordDevice = record;
@@ -245,9 +278,13 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ApplyOptions();
         if (!_settings.CheckForUpdates)
+        {
             HasUpdate = false;
+        }
         else if (!HasUpdate)
+        {
             _ = CheckForUpdatesAsync();
+        }
     }
 
     // ------------------------------------------------------------------ Updates
@@ -261,15 +298,24 @@ public sealed partial class MainViewModel : ObservableObject
     public async Task CheckForUpdatesAsync()
     {
         if (!_settings.CheckForUpdates)
+        {
             return;
+        }
+
         ShowKnownUpdate();
 
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         if (now - _settings.LastUpdateCheck is >= 0 and < UpdateCheckIntervalSeconds)
+        {
             return;
+        }
+
         string? latest = await UpdateChecker.GetLatestTagAsync();
         if (latest is null)
+        {
             return; // no answer: ask again next time
+        }
+
         _settings.LastUpdateCheck = now;
         _settings.LatestRelease = latest;
         ShowKnownUpdate();
@@ -287,7 +333,10 @@ public sealed partial class MainViewModel : ObservableObject
         string tag = _settings.LatestRelease;
         if (!_settings.CheckForUpdates || tag == _settings.DismissedRelease ||
             UpdateChecker.NewerThanCurrent(tag) is not Version newer)
+        {
             return;
+        }
+
         UpdateTitle = $"WinDV {newer.ToString(3)} is available";
         UpdateUri = UpdateChecker.ReleasePage(tag);
         HasUpdate = true;
@@ -299,7 +348,9 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _settings.SelectedTool = (int)value;
         if (!_suppressToolChange && _engine is not null)
+        {
             _ = RunAsync(InitPipelineAsync, resetOnError: false);
+        }
     }
 
     partial void OnCaptureFileChanged(string value) => _lastDiskCheck = null;
@@ -307,7 +358,84 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnCaptureDeviceChanged(string oldValue, string newValue)
     {
         if (oldValue is not null && oldValue != newValue && IsCaptureTool && _engine is not null && newValue.Length > 0)
+        {
             _ = RunAsync(InitPipelineAsync, resetOnError: false);
+        }
+    }
+
+    // ------------------------------------------------------------------ Devices coming and going
+
+    private void RestartDeviceTimer()
+    {
+        _deviceTimer.Stop();
+        _deviceTimer.Start();
+    }
+
+    // A capture device arrived or went away (settled by _deviceTimer): connect
+    // when the chosen camcorder appears, and let go of it when it disappears.
+    private async Task OnDevicesChangedAsync()
+    {
+        if (_engine is null)
+        {
+            return;
+        }
+
+        if (IsBusy)
+        {
+            RestartDeviceTimer(); // look again once the current action is done
+            return;
+        }
+        await RefreshDevicesAsync();
+
+        string device = IsCaptureTool ? CaptureDevice : RecordDevice;
+        if (device.Length == 0)
+        {
+            return;
+        }
+
+        bool present = _presentDevices.Contains(device);
+        EngineState state = Engine.GetStatus().State;
+        if (present && state == EngineState.Idle && IsCaptureTool)
+        {
+            await RunAsync(InitPipelineAsync, resetOnError: false);
+        }
+        else if (!present && state != EngineState.Idle)
+        {
+            await DisconnectAsync(state);
+        }
+    }
+
+    // The device in use has gone (turned off or unplugged): stop what was
+    // running, keeping what was captured so far, and wait for it to come back.
+    private async Task DisconnectAsync(EngineState state)
+    {
+        await RunAsync(async () =>
+        {
+            if (state == EngineState.Capturing)
+            {
+                await Engine.CaptureStopAsync();
+            }
+
+            await Engine.ResetAsync();
+            _waitingForDevice = IsCaptureTool;
+        });
+        if (HasError)
+        {
+            return; // stopping failed: that message says more
+        }
+
+        string message = state switch
+        {
+            EngineState.Capturing => "The capture was stopped and the file saved. Turn the camcorder back on " +
+                                     "and WinDV reconnects by itself; then press REC to carry on.",
+            EngineState.Recording => "Recording to tape was stopped. Turn the camcorder back on, then press Play " +
+                                     "to record again.",
+            _ when IsCaptureTool => "Turn it back on and WinDV reconnects by itself.",
+            _ => "Turn it back on before recording to tape.",
+        };
+        bool interrupted = state is EngineState.Capturing or EngineState.Recording;
+        ShowMessage("The camcorder was disconnected", message,
+            interrupted ? InfoBarSeverity.Warning : InfoBarSeverity.Informational);
     }
 
     // ------------------------------------------------------------------ Transport commands
@@ -366,7 +494,10 @@ public sealed partial class MainViewModel : ObservableObject
         if (IsCaptureTool)
         {
             if (_status.State == EngineState.Capturing)
+            {
                 await Engine.CaptureStopAsync();
+            }
+
             await Engine.TransportAsync(DeckCommand.Stop);
             return;
         }
@@ -388,23 +519,36 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
         if (_status.State is EngineState.Idle or EngineState.Finished)
+        {
             await BuildCaptureAsync();
+        }
+
         await StartCaptureAsync(0);
     });
 
     // ------------------------------------------------------------------ Pipeline
 
-    private DVEngine Engine => _engine ?? throw new EngineException("The DV engine is not running.");
+    private DvEngine Engine => _engine ?? throw new EngineException("The DV engine is not running.");
 
     // "InitVideo": capture shows the live picture straight away; record waits
     // until files are chosen and Play is pressed.
     private async Task InitPipelineAsync()
     {
         _exitOnFinish = false;
+        _waitingForDevice = false;
         if (IsCaptureTool)
         {
             StatusText = "Connecting to the camcorder...";
-            await BuildCaptureAsync();
+            try
+            {
+                await BuildCaptureAsync();
+            }
+            catch (EngineException e) when (e.DeviceNotFound)
+            {
+                // Turned off or unplugged: not an error. The device watcher
+                // connects as soon as it appears.
+                _waitingForDevice = true;
+            }
         }
         else
         {
@@ -417,7 +561,10 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ApplyOptions();
         if (string.IsNullOrWhiteSpace(CaptureDevice))
+        {
             throw new EngineException("Choose a DV device first.");
+        }
+
         await Engine.BuildCaptureAsync(CaptureDevice);
     }
 
@@ -425,9 +572,15 @@ public sealed partial class MainViewModel : ObservableObject
     {
         string fileBase = CaptureFile.Trim();
         if (fileBase.Length == 0)
+        {
             throw new EngineException("Choose where to save the capture first.");
+        }
+
         if (_settings.DeckControl && CanControlDeckNow() && !IsTapeMoving())
+        {
             await Engine.TransportAsync(DeckCommand.Play);
+        }
+
         await Engine.CaptureStartAsync(fileBase, _settings.DateTimeFormat, _settings.SuffixDigits, duration);
     }
 
@@ -435,10 +588,16 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ApplyOptions();
         if (string.IsNullOrWhiteSpace(RecordFiles))
+        {
             throw new EngineException("Choose the AVI files to record first.");
+        }
+
         if (string.IsNullOrWhiteSpace(RecordDevice))
+        {
             throw new EngineException("Choose a DV device first.");
-        string list = $"{_settings.AVIPrefix}|{RecordFiles}|{_settings.AVISuffix}";
+        }
+
+        string list = $"{_settings.AviPrefix}|{RecordFiles}|{_settings.AviSuffix}";
         await Engine.BuildRecordAsync(list, RecordDevice);
     }
 
@@ -452,9 +611,9 @@ public sealed partial class MainViewModel : ObservableObject
         // then only means REC starts the tape (see StartCaptureAsync). Recording
         // to tape needs the engine to put the deck into record itself.
         _engine?.SetOptions(new EngineOptions(
-            _settings.Type2AVI,
+            _settings.Type2Avi,
             _settings.DiscontinuityThreshold,
-            _settings.MaxAVIFrames,
+            _settings.MaxAviFrames,
             _settings.EveryNth,
             _settings.RecordPreview,
             DeckFollowsPipeline: IsRecordTool && _settings.DeckControl,
@@ -468,7 +627,10 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task RunAsync(Func<Task> action, bool resetOnError = true)
     {
         if (_engine is null)
+        {
             return;
+        }
+
         await _busy.WaitAsync();
         IsBusy = true;
         try
@@ -539,7 +701,10 @@ public sealed partial class MainViewModel : ObservableObject
     private void UpdateStatus()
     {
         if (_engine is null)
+        {
             return;
+        }
+
         _status = _engine.GetStatus();
         var s = _status;
 
@@ -555,22 +720,27 @@ public sealed partial class MainViewModel : ObservableObject
         IsGoingBackward = s.DeckMode is DeckMode.Rewind or DeckMode.CueReverse;
 
         Timecode = FormatTimecode(s.State == EngineState.Idle ? -1 : s.Time);
-        RecordedAt = s.DVTime > 0
-            ? DateTimeOffset.FromUnixTimeSeconds(s.DVTime).ToLocalTime().ToString("G")
+        RecordedAt = s.DvTime > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(s.DvTime).ToLocalTime().ToString("G")
             : "";
         DeckText = s.State == EngineState.Idle ? "" : DeckModeText(s);
         DroppedText = s.State == EngineState.Capturing && s.Dropped > 0 ? $"{s.Dropped} dropped" : "";
         IsQueueVisible = s.State is EngineState.Capturing or EngineState.Recording or EngineState.RecordPaused;
         QueueFill = s.QueueCapacity > 0 ? 100.0 * s.QueueLoad / s.QueueCapacity : 0;
         if (!IsBusy || s.State != EngineState.Idle)
+        {
             StatusText = StateText(s.State, s.StopReason);
+        }
+
         UpdateDiskSpace();
 
         // Update _lastState first: AnnounceStop -> ShowMessage calls back in here.
         bool justFinished = s.State == EngineState.Finished && _lastState != EngineState.Finished;
         _lastState = s.State;
         if (justFinished)
+        {
             AnnounceStop(s.StopReason);
+        }
 
         if (s.State == EngineState.Finished && _exitOnFinish)
         {
@@ -612,7 +782,9 @@ public sealed partial class MainViewModel : ObservableObject
             StopReason.DiskFull => "Stopped: the disk is almost full",
             _ => "Finished",
         },
-        _ => IsCaptureTool ? "Not connected" : "Choose AVI files, then press Play to record them to tape.",
+        _ when !IsCaptureTool => "Choose AVI files, then press Play to record them to tape.",
+        _ when _waitingForDevice => "Not connected. Turn the camcorder on in VTR (playback) mode.",
+        _ => "Not connected",
     };
 
     private EngineState _lastState;
@@ -620,7 +792,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     // DV is about 3.6 MB/s of video and audio; type-2 AVIs carry the audio a
     // second time. Every Nth frame divides the rate.
-    private const double DVBytesPerSecond = 3_800_000;
+    private const double DvBytesPerSecond = 3_800_000;
     private static readonly TimeSpan DiskCheckInterval = TimeSpan.FromSeconds(2);
 
     // Free space where captures go, and roughly how much DV fits. Only shown on
@@ -634,7 +806,10 @@ public sealed partial class MainViewModel : ObservableObject
         }
         long now = Environment.TickCount64;
         if (_lastDiskCheck is long last && now - last < DiskCheckInterval.TotalMilliseconds)
+        {
             return;
+        }
+
         _lastDiskCheck = now;
 
         long? free = FreeBytesFor(CaptureFile.Trim());
@@ -643,7 +818,7 @@ public sealed partial class MainViewModel : ObservableObject
             DiskText = "";
             return;
         }
-        double bytesPerSecond = DVBytesPerSecond / Math.Max(_settings.EveryNth, 1);
+        double bytesPerSecond = DvBytesPerSecond / Math.Max(_settings.EveryNth, 1);
         var left = TimeSpan.FromSeconds(Math.Max(0, (free.Value - ReserveBytes) / bytesPerSecond));
         DiskText = $"{FormatBytes(free.Value)} free, {FormatDuration(left)} of DV";
         IsDiskLow = left < TimeSpan.FromMinutes(15);
@@ -659,7 +834,10 @@ public sealed partial class MainViewModel : ObservableObject
             string full = Path.GetFullPath(fileBase.Length > 0 ? fileBase : ".");
             string? root = Path.GetPathRoot(full);
             if (string.IsNullOrEmpty(root))
+            {
                 return null;
+            }
+
             var drive = new DriveInfo(root);
             return drive.IsReady ? drive.AvailableFreeSpace : null;
         }
@@ -683,7 +861,10 @@ public sealed partial class MainViewModel : ObservableObject
     private static string DeckModeText(EngineStatus s)
     {
         if (!s.CanControlDeck)
+        {
             return "No deck control";
+        }
+
         return s.DeckMode switch
         {
             DeckMode.Stopped => "Stopped",
@@ -703,7 +884,10 @@ public sealed partial class MainViewModel : ObservableObject
     public static string FormatTimecode(long time)
     {
         if (time < 0)
+        {
             return "-:--:--.-";
+        }
+
         long tenths = time / 1_000_000;
         return $"{tenths / 36000}:{tenths / 600 % 60:00}:{tenths / 10 % 60:00}.{tenths % 10}";
     }
