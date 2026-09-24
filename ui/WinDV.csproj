@@ -19,6 +19,13 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
+    <!-- Releases are published (build\package.ps1) as Native AOT: one native
+         WinDV.exe instead of the .NET runtime, which shrinks the app ~170 -> ~60 MB.
+         A plain build still runs on the JIT, as before. -->
+    <PublishAot>true</PublishAot>
+    <!-- Needed even unpackaged: without it, publishing leaves out WinDV.pri (the
+         compiled XAML) and the app crashes on start. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
     <!-- The UI is English only; don't ship the framework's other languages. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <Nullable>enable</Nullable>
@@ -63,6 +70,14 @@
     <None Include="$(RepoRoot)$(NativePlatform)\$(Configuration)\WinDV.Native.dll"
           Link="WinDV.Native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
+
+  <!-- Likewise for WinUI's own strings: keep en-us, drop its ~85 other languages. -->
+  <Target Name="RemoveWinUITranslations" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Extension)'=='.mui' and !$([System.String]::new('%(RelativePath)').ToLowerInvariant().StartsWith('en-us'))" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <Content Include="Assets\WinDV.ico" CopyToOutputDirectory="PreserveNewest" />
