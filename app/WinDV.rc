@@ -103,7 +103,7 @@ CAPTION "About WinDV"
 FONT 8, "MS Sans Serif"
 BEGIN
     ICON            IDI_WINDV,IDC_STATIC,7,-4,20,20
-    LTEXT           "2.2.1",IDC_STATIC,30,8,21,8,SS_NOPREFIX
+    LTEXT           "2.2.2",IDC_STATIC,30,8,21,8,SS_NOPREFIX
     RTEXT           "© Makoto 2026",IDC_STATIC,48,8,86,8,
                     SS_NOPREFIX
     LTEXT           "Thanks to Petr Mourek's WinDV",IDC_EMAIL,7,21,100,8,SS_NOTIFY
@@ -264,8 +264,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,2,1,0
- PRODUCTVERSION 2,2,1,0
+ FILEVERSION 2,2,2,0
+ PRODUCTVERSION 2,2,2,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -283,14 +283,14 @@ BEGIN
             VALUE "Comments", "https://github.com/mak0t0san/WinDV2. Based on WinDV by Petr Mourek.\0"
             VALUE "CompanyName", "Makoto\0"
             VALUE "FileDescription", "WinDV - DV capturing and recording\0"
-            VALUE "FileVersion", "2, 2, 1, 0\0"
+            VALUE "FileVersion", "2, 2, 2, 0\0"
             VALUE "InternalName", "WinDV\0"
             VALUE "LegalCopyright", "Copyright © 2026 Makoto. Original WinDV © 2002-2003 Petr Mourek\0"
             VALUE "LegalTrademarks", "\0"
             VALUE "OriginalFilename", "WinDV.EXE\0"
             VALUE "PrivateBuild", "\0"
             VALUE "ProductName", "WinDV\0"
-            VALUE "ProductVersion", "2, 2, 1, 0\0"
+            VALUE "ProductVersion", "2, 2, 2, 0\0"
             VALUE "SpecialBuild", "\0"
         END
     END
