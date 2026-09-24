@@ -1,7 +1,8 @@
 # Builds WinDV for x64 and x86, runs the unit tests, and packages the WinUI app
 # (build\package.ps1: an installer and a portable zip per architecture).
 # Pushing a tag like v2.0.0 also publishes a GitHub release with all four files
-# (or attaches them to the release, if one was already created for that tag).
+# (or attaches them to the release, if one was already created for that tag),
+# then submits the new version to winget (Makoto.WinDV2).
 name: Build
 
 on:
@@ -111,3 +112,26 @@ jobs:
           notes=".github/release-notes/${GITHUB_REF_NAME}.md"
           if [ -f "$notes" ]; then notes_args=(--notes-file "$notes"); else notes_args=(--generate-notes); fi
           gh release create "$GITHUB_REF_NAME" dist/*-Setup.exe dist/*.zip --title "WinDV ${GITHUB_REF_NAME#v}" "${notes_args[@]}"
+
+  # Opens a pull request at microsoft/winget-pkgs for the new version, based on the
+  # previous version's manifests there (the installers only; the zips aren't in winget).
+  # A job here rather than a workflow "on: release": a release created with
+  # GITHUB_TOKEN starts no other workflows.
+  # Needs the WINGET_TOKEN secret: a classic PAT with public_repo and workflow scopes,
+  # of the account that owns a fork of microsoft/winget-pkgs. Skipped without it.
+  winget:
+    name: Submit to winget
+    if: github.ref_type == 'tag'
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Submit the new version
+        if: env.WINGET_TOKEN != ''
+        # Pinned: this step holds a token. main as of 2026-09-20.
+        uses: vedantmgoyal9/winget-releaser@a8fff44b123f115ce4c21543edf8b677376fc7e0
+        with:
+          identifier: Makoto.WinDV2
+          installers-regex: '-Setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
