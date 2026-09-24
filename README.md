@@ -10,6 +10,8 @@ A small Windows tool for moving DV video between a camcorder and disk over FireW
 - **Record**: push AVI files back out to DV tape, optionally concatenating several
   files into one continuous recording.
 
+![WinDV 2 playing a tape from a DV camcorder, with the transport controls and capture settings](docs/screenshot.png)
+
 WinDV 2 is by Makoto, <https://github.com/mak0t0san/WinDV2>.
 
 ## Download
@@ -184,6 +186,7 @@ tests/                       WinDV.Tests: doctest unit tests for core/
 launcher/                    WinDVLauncher: the portable zip's WinDV.exe, starts app\WinDV.exe
 installer/                   Inno Setup script for the release installer
 build/package.ps1            Packages a built app: installer + portable zip (used by CI)
+docs/screenshot.png          The screenshot above (the preview shows a synthetic image)
 external/baseclasses/        Vendored DirectShow base classes (MIT, Microsoft)
 external/doctest/            Vendored doctest 2.4.12 (MIT)
 legacy/                      Original VC6 WinDV.dsp/.dsw/.clw and a stale CppProperties.json,
