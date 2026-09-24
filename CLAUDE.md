@@ -56,8 +56,10 @@ Before calling a change done, build **both platforms**: x64-only breakage (point
 casts, `UINT_PTR`, `OAHWND`) is invisible on Win32 and vice versa. Warnings are errors.
 
 `vcvarsall.bat` is broken on this machine (fails looking for `vswhere.exe` and leaves
-`cl` off PATH). MSBuild does not need it, so use MSBuild directly. git is not on PATH
-either: use `C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe`.
+`cl` off PATH). MSBuild does not need it, so use MSBuild directly. Git for Windows
+is installed (`git` on PATH, and Git Bash, which Claude Code needs to run plugin hooks:
+without it `bash` resolves to WSL's `C:\Windows\system32\bash.exe`, which can't open
+Windows paths).
 
 ## Hard constraints
 

@@ -1,6 +1,7 @@
 # Builds WinDV for x64 and x86, runs the unit tests, and packages the WinUI app
 # (build\package.ps1: an installer and a portable zip per architecture).
-# Pushing a tag like v2.0.0 also publishes a GitHub release with all four files.
+# Pushing a tag like v2.0.0 also publishes a GitHub release with all four files
+# (or attaches them to the release, if one was already created for that tag).
 name: Build
 
 on:
@@ -97,10 +98,16 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # A release made by hand on GitHub creates the tag and so triggers this run:
+      # keep its title and notes, and just attach the files.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*-Setup.exe dist/*.zip --clobber
+            exit 0
+          fi
           notes=".github/release-notes/${GITHUB_REF_NAME}.md"
           if [ -f "$notes" ]; then notes_args=(--notes-file "$notes"); else notes_args=(--generate-notes); fi
           gh release create "$GITHUB_REF_NAME" dist/*-Setup.exe dist/*.zip --title "WinDV ${GITHUB_REF_NAME#v}" "${notes_args[@]}"
