@@ -45,6 +45,8 @@ public sealed partial class MainViewModel : ObservableObject
         RecordedAt = StatusText = DeckText = DroppedText = ErrorMessage = SignalText = DiskText = "";
         ErrorTitle = "Something went wrong";
         ErrorSeverity = InfoBarSeverity.Error;
+        UpdateTitle = "";
+        UpdateUri = new Uri(Views.AboutDialog.ProjectUrl);
 
         _timer = dispatcher.CreateTimer();
         _timer.Interval = PollInterval;
@@ -119,6 +121,11 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial InfoBarSeverity ErrorSeverity { get; set; }
     [ObservableProperty] public partial string ErrorMessage { get; set; }
     [ObservableProperty] public partial bool HasError { get; set; }
+
+    /// <summary>A newer WinDV is out: "WinDV 2.2.3 is available".</summary>
+    [ObservableProperty] public partial string UpdateTitle { get; set; }
+    [ObservableProperty] public partial Uri UpdateUri { get; set; }
+    [ObservableProperty] public partial bool HasUpdate { get; set; }
 
     public bool IsCaptureTool => SelectedTool == Tool.Capture;
     public bool IsRecordTool => SelectedTool == Tool.Record;
@@ -237,6 +244,53 @@ public sealed partial class MainViewModel : ObservableObject
     public void ApplySettings()
     {
         ApplyOptions();
+        if (!_settings.CheckForUpdates)
+            HasUpdate = false;
+        else if (!HasUpdate)
+            _ = CheckForUpdatesAsync();
+    }
+
+    // ------------------------------------------------------------------ Updates
+
+    private const long UpdateCheckIntervalSeconds = 24 * 60 * 60;
+
+    /// <summary>
+    /// Shows a notice when GitHub has a newer release. The last answer is kept, so
+    /// a known update shows straight away; GitHub itself is asked at most once a day.
+    /// </summary>
+    public async Task CheckForUpdatesAsync()
+    {
+        if (!_settings.CheckForUpdates)
+            return;
+        ShowKnownUpdate();
+
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (now - _settings.LastUpdateCheck is >= 0 and < UpdateCheckIntervalSeconds)
+            return;
+        string? latest = await UpdateChecker.GetLatestTagAsync();
+        if (latest is null)
+            return; // no answer: ask again next time
+        _settings.LastUpdateCheck = now;
+        _settings.LatestRelease = latest;
+        ShowKnownUpdate();
+    }
+
+    /// <summary>The notice was closed: don't mention this release again.</summary>
+    public void DismissUpdate()
+    {
+        HasUpdate = false;
+        _settings.DismissedRelease = _settings.LatestRelease;
+    }
+
+    private void ShowKnownUpdate()
+    {
+        string tag = _settings.LatestRelease;
+        if (!_settings.CheckForUpdates || tag == _settings.DismissedRelease ||
+            UpdateChecker.NewerThanCurrent(tag) is not Version newer)
+            return;
+        UpdateTitle = $"WinDV {newer.ToString(3)} is available";
+        UpdateUri = UpdateChecker.ReleasePage(tag);
+        HasUpdate = true;
     }
 
     // ------------------------------------------------------------------ Tool / device changes

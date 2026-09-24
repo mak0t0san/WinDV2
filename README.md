@@ -28,6 +28,10 @@ one file:
 
 The `x86` files are only for 32-bit Windows.
 
+WinDV tells you when a new version is out. At most once a day, it asks GitHub for the
+number of the latest release and nothing else, and it never downloads anything by
+itself. You can turn this off in Settings.
+
 The downloads are not code-signed, so Windows may show *"Windows protected your PC"*
 the first time. Click **More info**, then **Run anyway**.
 
@@ -175,6 +179,7 @@ ui/                          WinDV.UI: the WinUI 3 app (C#, .NET 10, unpackaged,
   ViewModels/MainViewModel   Transport commands, status polling, pipeline lifecycle
   Views/                     Settings screen, About dialog
   Services/SettingsStore     Registry settings (shared with the MFC app)
+  Services/UpdateChecker     Asks GitHub for the latest release (the "new version" notice)
 native/                      WinDV.Native: the engine as a DLL with a flat C API (windv_api.h)
 engine/                      WinDVEngine: the DirectShow engine (Win32 + ATL, no MFC)
 app/                         The original MFC application

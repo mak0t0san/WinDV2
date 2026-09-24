@@ -48,6 +48,15 @@ public sealed class SettingsStore
     public string AVISuffix { get; set; } = "";
     public bool RecordPreview { get; set; } = true;
 
+    // Updates (new in WinDV 2; the MFC app ignores this subkey)
+    public bool CheckForUpdates { get; set; } = true;
+    /// <summary>Unix time of the last successful check; checked at most once a day.</summary>
+    public long LastUpdateCheck { get; set; }
+    /// <summary>The newest release tag seen on GitHub, e.g. "v2.2.3".</summary>
+    public string LatestRelease { get; set; } = "";
+    /// <summary>A release whose notice the user closed; it isn't shown again.</summary>
+    public string DismissedRelease { get; set; } = "";
+
     public bool IsFirstRun => WindowWidth <= 0 || WindowHeight <= 0;
 
     public static SettingsStore Load()
@@ -57,6 +66,7 @@ public sealed class SettingsStore
         using RegistryKey? main = root?.OpenSubKey("MainWindow");
         using RegistryKey? capture = root?.OpenSubKey("Capture");
         using RegistryKey? record = root?.OpenSubKey("Record");
+        using RegistryKey? updates = root?.OpenSubKey("Updates");
 
         s.WindowX = GetInt(main, "X", 0);
         s.WindowY = GetInt(main, "Y", 0);
@@ -84,6 +94,11 @@ public sealed class SettingsStore
         s.AVIPrefix = GetString(record, "AVIPrefix", "");
         s.AVISuffix = GetString(record, "AVISuffix", "");
         s.RecordPreview = GetInt(record, "Preview", 1) > 0;
+
+        s.CheckForUpdates = GetInt(updates, "CheckForUpdates", 1) > 0;
+        s.LastUpdateCheck = updates?.GetValue("LastCheck") is long last ? last : 0;
+        s.LatestRelease = GetString(updates, "LatestRelease", "");
+        s.DismissedRelease = GetString(updates, "DismissedRelease", "");
         return s;
     }
 
@@ -121,6 +136,13 @@ public sealed class SettingsStore
             record.SetValue("AVIPrefix", AVIPrefix, RegistryValueKind.String);
             record.SetValue("AVISuffix", AVISuffix, RegistryValueKind.String);
             SetInt(record, "Preview", RecordPreview ? 1 : 0);
+        }
+        using (RegistryKey updates = root.CreateSubKey("Updates"))
+        {
+            SetInt(updates, "CheckForUpdates", CheckForUpdates ? 1 : 0);
+            updates.SetValue("LastCheck", LastUpdateCheck, RegistryValueKind.QWord);
+            updates.SetValue("LatestRelease", LatestRelease, RegistryValueKind.String);
+            updates.SetValue("DismissedRelease", DismissedRelease, RegistryValueKind.String);
         }
     }
 
