@@ -45,7 +45,10 @@ The solution's `Win32` platform maps to `x86` for the C# project, and the csproj
 back to `Win32` (`NativePlatform`) to build and copy the right `WinDV.Native.dll`.
 CI (`.github/workflows/build.yml`) builds both platforms on `windows-2025-vs2026`, runs
 the tests and uploads zipped apps. Pushing a `vX.Y.Z` tag publishes a GitHub release,
-using `.github/release-notes/vX.Y.Z.md` as the notes if that file exists. The version
+using `.github/release-notes/vX.Y.Z.md` as the notes if that file exists. Its `winget`
+job then opens a PR at `microsoft/winget-pkgs` for package `Makoto.WinDV2` (installers
+only), using the `WINGET_TOKEN` secret and the `mak0t0san/winget-pkgs` fork; without the
+secret the job is skipped. The version
 lives in `ui/WinDV.csproj` (`<Version>`) and `app/WinDV.rc` (VERSIONINFO). A tag build
 overrides it with the tag's version.
 
