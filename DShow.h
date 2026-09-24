@@ -1,262 +1,324 @@
-#define WM_DV_TIMECHANGE	(WM_USER+201)
+// DShow.h : DirectShow pipeline - DV frame sources, sinks and the CDV controller
+//
+// A CFrameSource pushes raw DV frames into a CFrameHandler. Sources and sinks are
+// small DirectShow graphs built around custom filters (CInputGraph wraps an input
+// pin, COutputGraph an output pin), so the application sees every frame itself.
+// CDV owns the pipeline and moves frames between threads through a FrameQueue.
+#pragma once
 
-class CDShowException: public CException {
+#include "FrameQueue.h"
+
+// Posted to the CDV's parent when the DV recording timestamp changes; read the
+// new value with CDV::GetDVTime().
+constexpr UINT WM_DV_TIMECHANGE = WM_USER + 201;
+// Posted to the CDV's parent when a worker thread fails; fetch the message with
+// CDV::TakeError().
+constexpr UINT WM_DV_ERROR = WM_USER + 202;
+
+/////////////////////////////////////////////////////////////////////////////
+// Errors
+
+class DShowError : public std::runtime_error {
 public:
-	CDShowException(BOOL b_AutoDelete, int cause, LPCSTR message);
-	int m_cause;
-	enum {none = 0, deviceNotFound, error};
+	enum class Cause { Error, DeviceNotFound };
+
+	explicit DShowError(const CString& message, HRESULT hr = S_OK, Cause cause = Cause::Error);
+
+	// The user-facing message, including the HRESULT and its description.
+	const CString& Message() const { return m_message; }
+	HRESULT Result() const { return m_hr; }
+	Cause GetCause() const { return m_cause; }
+
+private:
 	CString m_message;
-	virtual BOOL GetErrorMessage(LPTSTR lpszError, UINT nMaxError, PUINT pnHelpContext = NULL);
-protected:
+	HRESULT m_hr;
+	Cause m_cause;
 };
 
-void ThrowDShowException(int cause, LPCSTR message);
+// Throws DShowError unless hr is exactly S_OK.
+void CheckHR(HRESULT hr, LPCWSTR what);
+// Throws DShowError if hr is a failure code; success codes such as S_FALSE pass.
+void CheckSucceeded(HRESULT hr, LPCWSTR what);
+
+/////////////////////////////////////////////////////////////////////////////
+// Frame source / handler interfaces
 
 class CFrameHandler {
 public:
-	virtual void HandleFrame(REFERENCE_TIME duration, BYTE *data, int len) = 0;
+	virtual ~CFrameHandler() = default;
+	virtual void HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame) = 0;
+	// The source has no more frames.
+	virtual void EndOfStream() {}
+	// The source failed on one of its own threads and has stopped.
+	virtual void SourceError(const CString& /*message*/) {}
 };
 
 class CFrameSource {
 public:
-	virtual void GetMediaType(CMediaType *type) = 0;
-	virtual void Run(CFrameHandler *handler) = 0;
+	virtual ~CFrameSource() = default;
+	virtual void GetMediaType(CMediaType* type) = 0;
+	virtual void Run(CFrameHandler* handler) = 0;
 	virtual void Stop() = 0;
 };
 
+/////////////////////////////////////////////////////////////////////////////
+// Graph wrappers
+
 class CFilterGraph {
 public:
-	ICaptureGraphBuilder2 *m_GB;
-	IGraphBuilder	*m_FG;
-	IMediaControl *m_MC;
-	IMediaSeeking *m_MS;
-	IMediaEventEx *m_ME;
 	CFilterGraph();
 	virtual ~CFilterGraph();
+
+	CFilterGraph(const CFilterGraph&) = delete;
+	CFilterGraph& operator=(const CFilterGraph&) = delete;
+
+protected:
+	CComPtr<ICaptureGraphBuilder2> m_GB;
+	CComPtr<IGraphBuilder> m_FG;
+	CComPtr<IMediaControl> m_MC;
+	CComPtr<IMediaSeeking> m_MS;
+	CComPtr<IMediaEventEx> m_ME;
 };
 
-class CInputGraph:public CFilterGraph, CFrameSource {
+// A graph that ends in our own input pin, which hands each sample to a handler.
+class CInputGraph : public CFilterGraph, public CFrameSource {
 public:
-	CFrameHandler *m_handler;
-
-	class CInputFilter: public CBaseFilter {
-	public:
-		CInputGraph *m_graph;
-
-		CInputFilter(CInputGraph *graph);
-		~CInputFilter();
-		int GetPinCount();
-		CBasePin *GetPin(int n);
-		CCritSec m_cs;
-
-		class CInputPin : public CBaseInputPin {
-		public:
-			CInputPin(CInputFilter *pFilter, CCritSec *cs, HRESULT *phr);
-			HRESULT CheckMediaType(const CMediaType *pmt);
-			STDMETHODIMP Receive(IMediaSample *pSample);
-    		STDMETHODIMP EndOfStream();
-
-		} *m_input;
-	} *m_inputFilter;
-
 	CInputGraph();
-	void GetMediaType(CMediaType *type);
-	void Run(CFrameHandler *handler);
-	void Stop();
-	~CInputGraph();
+	~CInputGraph() override;
+
+	void GetMediaType(CMediaType* type) override;
+	void Run(CFrameHandler* handler) override;
+	void Stop() override;
+
+protected:
+	class CInputFilter;
+	// COM reference keeping m_inputFilter alive; CBaseFilter derives from IUnknown
+	// twice, so it cannot sit in a CComPtr of its own type.
+	CComPtr<IBaseFilter> m_inputFilterRef;
+	CInputFilter* m_inputFilter = nullptr;
+	IPin* InputPin() const;
+	bool IsInputConnected() const;
+
+private:
+	std::atomic<CFrameHandler*> m_handler{nullptr};
 };
 
-class COutputGraph:public CFilterGraph, public CFrameHandler {
+// A graph that starts at our own output pin, fed by HandleFrame().
+class COutputGraph : public CFilterGraph, public CFrameHandler {
 public:
+	// queueDepth > 0 delivers through a COutputQueue with that many buffers.
+	COutputGraph(const CMediaType& type, int queueDepth = 0);
+	~COutputGraph() override;
+
+	void HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame) override;
+
+protected:
+	class COutputFilter;
+	CComPtr<IBaseFilter> m_outputFilterRef;
+	COutputFilter* m_outputFilter = nullptr;
+
+	HRESULT GetDeliveryBuffer(IMediaSample** sample);
+	HRESULT Deliver(IMediaSample* sample);
+	void DeliverEndOfStream();
+	void WaitForCompletion();
+
+private:
 	CMediaType m_type;
-	REFERENCE_TIME m_time;
-
-	int m_queue;
-
-	class COutputFilter : public CBaseFilter {
-	public:
-		COutputGraph *m_graph;
-
-		COutputFilter(COutputGraph *graph);
-		~COutputFilter();
-		int GetPinCount();
-		CBasePin *GetPin(int n);
-		CCritSec m_cs;
-
-		class COutputPin : public CBaseOutputPin {
-		public:
-			COutputQueue *m_queue;
-			COutputPin(COutputFilter *pFilter, CCritSec *cs, HRESULT *phr);
-			HRESULT GetMediaType(int iPosition, CMediaType *pmt);
-			HRESULT CheckMediaType(const CMediaType *pmt);
-			HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *ppropInputRequest);
-			HRESULT Deliver(IMediaSample *pSample);
-			HRESULT DeliverEndOfStream();
-			HRESULT Active();
-			HRESULT Inactive();
-		} *m_output;
-	} *m_outputFilter;	
-	
-	COutputGraph(CMediaType *type, int queue = 0);
-	~COutputGraph();
-	void HandleFrame(REFERENCE_TIME duration, BYTE *data, int len);
+	REFERENCE_TIME m_time = 0;
+	int m_queueDepth;
 };
 
-class CAVIReader:public CInputGraph {
+/////////////////////////////////////////////////////////////////////////////
+// Sources
+
+class CAVIReader : public CInputGraph {
 public:
-	CAVIReader(LPCSTR filename);
+	explicit CAVIReader(const CString& filename);
 };
 
-class CAVIJoiner:public CFrameSource, CFrameHandler {
+// Plays a list of AVI files back to back as one stream. Each file needs its own
+// graph, so the next one is built on a helper thread when the current one ends.
+class CAVIJoiner : public CFrameSource, public CFrameHandler {
 public:
-	CFrameHandler *m_joinHandler;
-	CArray<CString, CString&> m_filenames;
-	CAVIReader *m_reader;
-	CEvent m_ev;
-	CWinThread *m_thread;
-	int m_current;
-	bool m_stopping;
+	// filenames: '|'-separated list; each entry may contain wildcards.
+	explicit CAVIJoiner(const CString& filenames);
+	~CAVIJoiner() override;
 
-	CAVIJoiner(LPCSTR filenames);
-	~CAVIJoiner();
-	void GetMediaType(CMediaType *type);
-	void Run(CFrameHandler *handler);
-	void Stop();
-	void HandleFrame(REFERENCE_TIME duration, BYTE *data, int len);
-	void JoinerThread();
+	void GetMediaType(CMediaType* type) override;
+	void Run(CFrameHandler* handler) override;
+	void Stop() override;
+
+	void HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame) override;
+	void EndOfStream() override;
+
+private:
+	void JoinerThread(std::stop_token stop);
+
+	std::vector<CString> m_filenames;
+	std::size_t m_next = 0;
+	std::unique_ptr<CAVIReader> m_reader;
+	std::atomic<CFrameHandler*> m_handler{nullptr};
+	std::atomic<bool> m_stopping{false};
+
+	std::mutex m_mutex;
+	std::condition_variable_any m_readerEnded;
+	bool m_readerEndedFlag = false;
+	std::jthread m_thread;
 };
 
+// Camcorder transport control (play/pause/record) through IAMExtTransport.
 class CDVControl {
-	IAMExtTransport *m_ET;
 public:
-	CDVControl();
-	~CDVControl();
-	void CtrlAttach(IUnknown *pDev);
+	void CtrlAttach(IUnknown* device);
 	void CtrlStop();
 	void CtrlPlay();
 	void CtrlPause();
 	void CtrlRecord();
 	void CtrlRecPause();
+
+private:
+	CComPtr<IAMExtTransport> m_ET;
 };
 
-class CDVInput:public CInputGraph, public CDVControl {
+class CDVInput : public CInputGraph, public CDVControl {
 public:
-	IAMDroppedFrames * m_DF;
-	CDVInput(LPCSTR vsrc); 
-	~CDVInput(); 
+	explicit CDVInput(const CString& device);
 	long GetDroppedFrames();
+
+private:
+	CComPtr<IAMDroppedFrames> m_DF;
 };
 
-class CDVOutput:public COutputGraph, public CDVControl {
+/////////////////////////////////////////////////////////////////////////////
+// Sinks
+
+class CDVOutput : public COutputGraph, public CDVControl {
 public:
-	CDVOutput(LPCSTR vdst, CMediaType *type);
-	~CDVOutput();
+	CDVOutput(const CString& device, const CMediaType& type);
+	~CDVOutput() override;
 };
 
-class CAVIWriter:public COutputGraph {
+// Writes one AVI file. The file is written under a temporary "~" name and moved
+// to its final name in Finish(), once the DV timestamp for the name is known.
+class CAVIWriter : public COutputGraph {
 public:
-	CString m_tmpfile, m_filename, m_dtformat;
+	CAVIWriter(const CString& base, const CString& dtformat, int ndigits, std::time_t dvTime, bool type2AVI,
+	           const CMediaType& type);
+	~CAVIWriter() override;
+
+	// Flushes the file and renames it. Throws DShowError if the rename fails.
+	void Finish();
+
+	std::time_t m_dvTime; // used for the final name; 0 means "now"
+
+private:
+	CString m_tmpfile, m_base, m_dtformat;
 	int m_ndigits;
-	time_t m_dvtime;
-
-	CAVIWriter(LPCSTR filename, LPCSTR dtformat, int ndigits, time_t tim, bool type2AVI, CMediaType *type);
-	~CAVIWriter();
+	bool m_finished = false;
 };
 
-class CMonitor:public COutputGraph {
+// On-screen preview. Frames are offered with HandleFrame(); a helper thread
+// takes one whenever the renderer is ready, so preview never slows capture.
+class CMonitor : public COutputGraph {
 public:
-	HWND m_hWnd;
-	IVideoWindow *m_VW;
-	IMediaSample *m_sample;
-	CWinThread *m_thread;
-	CEvent m_ev;
-
-	CMonitor(HWND hWnd, CMediaType *type);
-	~CMonitor();
+	CMonitor(HWND hWnd, const CMediaType& type);
+	~CMonitor() override;
 
 	void Resize();
-	void HandleFrame(REFERENCE_TIME duration, BYTE *data, int len);
-	void MonitoringThread();
+	void HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame) override;
+
+private:
+	void MonitoringThread(std::stop_token stop);
+
+	HWND m_hWnd;
+	CComPtr<IVideoWindow> m_VW;
+
+	std::mutex m_mutex;
+	std::condition_variable_any m_filled;
+	CComPtr<IMediaSample> m_sample; // empty buffer waiting for a frame
+	bool m_sampleFilled = false;
+	std::jthread m_thread;
 };
 
+/////////////////////////////////////////////////////////////////////////////
+// CDV - owns the pipeline and the state machine; also the preview window
 
-class CDVQueue {
-	struct Buffer {
-		REFERENCE_TIME duration;
-		int len;
-		BYTE data[1];
-	};
+class CDV : public CStatic, public CFrameHandler {
 public:
-	CEvent m_evPut, m_evGet;
-	CCritSec m_cs;
-	BYTE *m_buffers;
-	Buffer ** m_queue;
-	int m_dataSize, m_queueSize, m_head, m_tail, m_load;
-	bool m_end;
-	CDVQueue(int queueSize, int dataSize);
-	~CDVQueue();
-	void Put(REFERENCE_TIME duration, BYTE *data, int len);
-	bool Get(REFERENCE_TIME *duration, BYTE **data, int *len);
-};
-
-class CDV:public CStatic, CFrameHandler  {
-public:
-	enum {Idle, RecordPaused, Recording, CapturePaused, Capturing, Finished} m_state;
-	bool m_type2AVI;
-	int m_discontinuityTreshold;
-	int m_maxAVIFrames;
-	int m_everyNth;
-	bool m_recordPreview;
-	bool m_DVctrl;
+	enum State { Idle, RecordPaused, Recording, CapturePaused, Capturing, Finished };
 
 	CDV();
-	~CDV();
+	~CDV() override;
 
-	int GetState();
-	int GetDropped();
-	int GetQueueLoad();
-	long GetCounter();
-	REFERENCE_TIME GetTime();
-	CString GetCaptureFilename();
+	// Settings; written by the UI thread, read by the worker threads.
+	std::atomic<bool> m_type2AVI{true};
+	std::atomic<int> m_discontinuityThreshold{1};
+	std::atomic<int> m_maxAVIFrames{25 * 60 * 15};
+	std::atomic<int> m_everyNth{1};
+	std::atomic<bool> m_recordPreview{true};
+	std::atomic<bool> m_DVctrl{false};
+
+	State GetState() const { return m_state; }
+	long GetDropped() const { return m_dropped; }
+	std::size_t GetQueueLoad() const;
+	long GetCounter() const { return m_counter; }
+	REFERENCE_TIME GetTime() const { return m_time; }
+	std::time_t GetDVTime() const { return m_dvTime; }
+	// Returns and clears the last error reported by a worker thread.
+	CString TakeError();
 
 	void Destroy();
 
-	void BuildCapturing(LPCSTR vsrc);
-	void StartCapturing(LPCSTR filename, LPCSTR dtformat, int ndigits, REFERENCE_TIME captureTime = 0);
+	void BuildCapturing(const CString& device);
+	void StartCapturing(const CString& filename, const CString& dtformat, int ndigits, REFERENCE_TIME captureTime = 0);
 	void StopCapturing();
-	void BuildRecording(LPCSTR filenames, LPCSTR vdst);
+	void BuildRecording(const CString& filenames, const CString& device);
 	void StartRecording();
 	void StopRecording();
 
-	void RecordingThread();
-	void CapturingThread();
 protected:
-	CAVIJoiner *m_aviJoiner;
-	CAVIWriter *m_aviWriter;
-	CDVInput * m_dvInput;
-	CDVOutput * m_dvOutput;
-	CMonitor *m_monitor;
-	CDVQueue * m_queue;
+	void HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame) override;
+	void EndOfStream() override;
+	void SourceError(const CString& message) override;
 
-	CCritSec m_cs;
-
-	CWinThread *m_thread;
-	CString m_captureFilename, m_dtformat;
-	int m_ndigits;
-	long m_dropped;
-	long m_counter;
-	REFERENCE_TIME m_time;
-	REFERENCE_TIME m_captureTime;
-
-	void HandleFrame(REFERENCE_TIME duration, BYTE *data, int len);
-
-	//{{AFX_MSG(CDV)
 	afx_msg void OnSize(UINT nType, int cx, int cy);
-	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
+
+private:
+	struct CaptureTarget {
+		CString filename, dtformat;
+		int ndigits = 0;
+	};
+
+	void CapturingThread(std::stop_token stop);
+	void RecordingThread(std::stop_token stop);
+	void CaptureLoop();
+	void RecordLoop();
+	void FinishWriter();
+	void ReportError(const CString& message);
+	void NotifyTimeChange(std::time_t dvTime);
+	void StartWorker(void (CDV::*worker)(std::stop_token));
+
+	std::atomic<State> m_state{Idle};
+	HWND m_notifyWnd = nullptr;
+
+	std::unique_ptr<CAVIJoiner> m_aviJoiner;
+	std::unique_ptr<CAVIWriter> m_aviWriter; // only touched by the capture thread
+	std::unique_ptr<CDVInput> m_dvInput;
+	std::unique_ptr<CDVOutput> m_dvOutput;
+	std::unique_ptr<CMonitor> m_monitor;
+	std::unique_ptr<windv::FrameQueue> m_queue;
+	std::jthread m_thread;
+
+	std::mutex m_mutex; // guards m_target and m_error
+	CaptureTarget m_target;
+	CString m_error;
+
+	std::atomic<long> m_dropped{0};
+	std::atomic<long> m_counter{-1};
+	std::atomic<REFERENCE_TIME> m_time{-1};
+	std::atomic<REFERENCE_TIME> m_captureTime{0};
+	std::atomic<std::time_t> m_dvTime{0};
 };
 
-void GetVideoSrcList(CArray<CString,CString&> &);
-void GetVideoDstList(CArray<CString,CString&> &);
-
-CString FormatTime(LPCSTR format, time_t tim);
+std::vector<CString> GetVideoDeviceList();

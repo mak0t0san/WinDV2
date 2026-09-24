@@ -1,50 +1,20 @@
-#if !defined(AFX_DROPFILESEDIT_H__B0489045_2D71_4D76_B7DC_EE835A73F6F0__INCLUDED_)
-#define AFX_DROPFILESEDIT_H__B0489045_2D71_4D76_B7DC_EE835A73F6F0__INCLUDED_
-
-#if _MSC_VER > 1000
+// DropFilesEdit.h : edit control that accepts files dropped from Explorer
 #pragma once
-#endif // _MSC_VER > 1000
-// DropFilesEdit.h : header file
-//
 
-/////////////////////////////////////////////////////////////////////////////
-// CDropFilesEdit window
-
-class CDropFilesEdit : public CEdit
-{
-// Construction
+class CDropFilesEdit : public CEdit {
 public:
-	CDropFilesEdit(LPCSTR multidrop_separator=NULL, bool (*filter)(CString &) = NULL);
+	// Adjusts a dropped path in place; returning false rejects it.
+	using Filter = bool (*)(CString& path);
 
-// Attributes
-public:
-	CString m_separator;
-	bool (*m_filter)(CString &);
+	// With a separator, several dropped files are joined with it; without one
+	// only the first file is used.
+	explicit CDropFilesEdit(LPCWSTR multidropSeparator = nullptr, Filter filter = nullptr);
 
-// Operations
-public:
-
-// Overrides
-	// ClassWizard generated virtual function overrides
-	//{{AFX_VIRTUAL(CDropFilesEdit)
-	//}}AFX_VIRTUAL
-
-// Implementation
-public:
-	virtual ~CDropFilesEdit();
-
-	// Generated message map functions
 protected:
-	//{{AFX_MSG(CDropFilesEdit)
 	afx_msg void OnDropFiles(HDROP hDropInfo);
-	//}}AFX_MSG
-
 	DECLARE_MESSAGE_MAP()
+
+private:
+	CString m_separator;
+	Filter m_filter;
 };
-
-/////////////////////////////////////////////////////////////////////////////
-
-//{{AFX_INSERT_LOCATION}}
-// Microsoft Visual C++ will insert additional declarations immediately before the previous line.
-
-#endif // !defined(AFX_DROPFILESEDIT_H__B0489045_2D71_4D76_B7DC_EE835A73F6F0__INCLUDED_)

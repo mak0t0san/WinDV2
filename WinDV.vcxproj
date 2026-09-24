@@ -9,6 +9,14 @@
       <Configuration>Release</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
 
   <PropertyGroup Label="Globals">
@@ -23,9 +31,9 @@
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <PlatformToolset>v145</PlatformToolset>
-    <!-- Original project is MBCS, not Unicode. Static MFC keeps the .exe
-         self-contained so it runs without the MFC redistributable. -->
-    <CharacterSet>MultiByte</CharacterSet>
+    <!-- Static MFC keeps the .exe self-contained so it runs without the MFC
+         redistributable. -->
+    <CharacterSet>Unicode</CharacterSet>
     <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
@@ -53,16 +61,20 @@
 
   <ItemDefinitionGroup>
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>false</TreatWarningAsError>
-      <DisableSpecificWarnings>4996;4100;4189;4245;4389;4018;4267;4302;4311;4312;4456;4457;4459;5040;4995;4838</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;_MBCS;_WIN32_DCOM;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(BaseClassesDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_WIN32_DCOM;_WIN32_WINNT=0x0A00;WINVER=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(BaseClassesDir);$(ProjectDir)core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <!-- /permissive- is off because the vendored <streams.h> does not compile
+           under it (qualified member names, CAggDirectDraw's destructor). The
+           individual conformance switches below cover most of the same ground. -->
       <ConformanceMode>false</ConformanceMode>
-      <LanguageStandard>Default</LanguageStandard>
-      <SDLCheck>false</SDLCheck>
+      <AdditionalOptions>/Zc:__cplusplus /Zc:strictStrings /Zc:rvalueCast /Zc:ternary /Zc:inline /Zc:referenceBinding %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <SDLCheck>true</SDLCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
     </ClCompile>
@@ -75,7 +87,7 @@
       <SubSystem>Windows</SubSystem>
       <!-- largeint.lib and olepro32.lib no longer ship in the Windows SDK; the
            functionality they provided is in the CRT / oleaut32 now. -->
-      <AdditionalDependencies>winmm.lib;kernel32.lib;advapi32.lib;version.lib;user32.lib;gdi32.lib;comctl32.lib;ole32.lib;oleaut32.lib;uuid.lib;strmiids.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>winmm.lib;kernel32.lib;advapi32.lib;version.lib;user32.lib;gdi32.lib;comctl32.lib;ole32.lib;oleaut32.lib;uuid.lib;shell32.lib;strmiids.lib;quartz.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(BaseClassesDir)$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
@@ -112,7 +124,6 @@
     <ClCompile Include="CaptureCfg.cpp" />
     <ClCompile Include="DropFilesEdit.cpp" />
     <ClCompile Include="DShow.cpp" />
-    <ClCompile Include="DV.cpp" />
     <ClCompile Include="DVToolsDlg.cpp" />
     <ClCompile Include="RecordCfg.cpp" />
     <ClCompile Include="ToolTab.cpp" />
@@ -124,7 +135,6 @@
     <ClInclude Include="CaptureCfg.h" />
     <ClInclude Include="DropFilesEdit.h" />
     <ClInclude Include="DShow.h" />
-    <ClInclude Include="DV.h" />
     <ClInclude Include="DVToolsDlg.h" />
     <ClInclude Include="RecordCfg.h" />
     <ClInclude Include="Resource.h" />
@@ -148,6 +158,9 @@
   <ItemGroup>
     <ProjectReference Include="external\baseclasses\baseclasses.vcxproj">
       <Project>{b45e1c2a-7f3d-4a91-9c10-6d2e8b4f1a00}</Project>
+    </ProjectReference>
+    <ProjectReference Include="core\WinDVCore.vcxproj">
+      <Project>{3e8f6a21-9c47-4b5d-a1e3-7d2c9f0b4a61}</Project>
     </ProjectReference>
   </ItemGroup>
 

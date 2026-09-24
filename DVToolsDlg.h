@@ -1,85 +1,30 @@
-// DVToolsDlg.h : header file
-//
-
-#if !defined(AFX_DVTOOLSDLG_H__0633EC27_A5A4_4B4B_8547_D2DE0ADC9AC9__INCLUDED_)
-#define AFX_DVTOOLSDLG_H__0633EC27_A5A4_4B4B_8547_D2DE0ADC9AC9__INCLUDED_
-
-#if _MSC_VER > 1000
+// DVToolsDlg.h : main dialog - capture / record tabs, status, command line
 #pragma once
-#endif // _MSC_VER > 1000
 
-/////////////////////////////////////////////////////////////////////////////
-// CDVToolsDlg dialog
+#include "DShow.h"
+#include "DropFilesEdit.h"
+#include "ToolTab.h"
 
-class CDVToolsDlg : public CDialog
-{
-// Construction
+class CDVToolsDlg : public CDialog {
 public:
-	CDVToolsDlg(CWnd* pParent = NULL);	// standard constructor
-	virtual  ~CDVToolsDlg();
+	explicit CDVToolsDlg(CWnd* pParent = nullptr);
+	~CDVToolsDlg() override;
 
-// Dialog Data
-	//{{AFX_DATA(CDVToolsDlg)
 	enum { IDD = IDD_DVTOOLS_DIALOG };
-	CToolTab	m_toolTab;
-	CButton	m_DVCtrl;
-	CStatic	m_counter;
-	CStatic	m_status3;
-	CStatic	m_status2;
-	CDV	m_video;
-	CStatic	m_VDST;
-	CStatic	m_VSRC;
-	CDropFilesEdit	m_FSRC;
-	CDropFilesEdit	m_FDST;
-	CStatic	m_status;
-	//}}AFX_DATA
 
-	// ClassWizard generated virtual function overrides
-	//{{AFX_VIRTUAL(CDVToolsDlg)
-	protected:
-	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV support
-	//}}AFX_VIRTUAL
-
-// Implementation
 protected:
-	void Exception2Status(CException *e);
-	void InitVideo();
-	void SetToolTabItemSize();
+	void DoDataExchange(CDataExchange* pDX) override;
+	BOOL OnInitDialog() override;
+	void OnOK() override;
+	void OnCancel() override;
 
-	HICON m_hIcon, m_hIconSmall;
-
-	RECT *m_originalRects;
-	RECT m_originalRect;
-	RECT m_lastRect;
-	int m_minWidth, m_minHeight;
-	CButton *tabChangeBtns;
-
-	CString m_VSRCname;
-	CString m_VDSTname;
-
-	CString m_AVIPrefix, m_AVISuffix;
-
-	CString m_DTFormat; CString m_DTFormatHistory;
-	int m_nSuffixDigits;
-
-	enum {Iddle, CapturePaused, Capturing, RecordPaused, Recording};
-
-	bool m_exitOnFinish;
-
-	afx_msg void OnCmdTabChange(UINT nID);
-	afx_msg LRESULT OnDVTimeChange(WPARAM, LPARAM);
-	// Generated message map functions
-	//{{AFX_MSG(CDVToolsDlg)
-	virtual BOOL OnInitDialog();
 	afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	afx_msg void OnSize(UINT nType, int cx, int cy);
-	afx_msg void OnGetMinMaxInfo(MINMAXINFO FAR* lpMMI);
+	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
 	afx_msg void OnSelchangeToolTab(NMHDR* pNMHDR, LRESULT* pResult);
-	virtual void OnCancel();
 	afx_msg void OnClose();
-	virtual void OnOK();
 	afx_msg void OnVsrcSel();
 	afx_msg void OnVdstSel();
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
@@ -89,14 +34,61 @@ protected:
 	afx_msg void OnConfig();
 	afx_msg void OnCapture();
 	afx_msg void OnRecord();
-	afx_msg void OnTimer(UINT nIDEvent);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnPicture();
 	afx_msg void OnDvctrl();
-	//}}AFX_MSG
+	afx_msg void OnCmdTabChange(UINT nID);
+	afx_msg LRESULT OnDVTimeChange(WPARAM, LPARAM);
+	afx_msg LRESULT OnDVError(WPARAM, LPARAM);
 	DECLARE_MESSAGE_MAP()
+
+private:
+	enum Tab { TabCapture = 0, TabRecord = 1, TabCount };
+
+	int CurrentTab() const;
+	void SelectTab(int tab);
+	void ShowTabControls();
+	void SetToolTabItemSize();
+	void InitVideo();
+	void StartStatusTimer();
+	void ShowError(const CString& message);
+	// Runs a pipeline action; on failure resets the pipeline and shows the error.
+	template <typename Action>
+	void Guarded(Action&& action);
+	bool RunCommandLine();
+	void LoadSettings();
+	void SaveSettings();
+	CString RecordFileList(const CString& files) const;
+	bool SelectDevice(CString& deviceName, CStatic& label);
+
+	CToolTab m_toolTab;
+	CButton m_DVCtrl;
+	CStatic m_counter;
+	CStatic m_status3;
+	CStatic m_status2;
+	CDV m_video;
+	CStatic m_VDST;
+	CStatic m_VSRC;
+	CDropFilesEdit m_FSRC;
+	CDropFilesEdit m_FDST;
+	CStatic m_status;
+
+	HICON m_hIcon = nullptr;
+	HICON m_hIconSmall = nullptr;
+
+	// Layout: control rectangles at the dialog's design size, scaled in OnSize.
+	std::vector<CRect> m_originalRects;
+	CRect m_originalRect{0, 0, 0, 0};
+	CRect m_lastRect{0, 0, 0, 0};
+	int m_minWidth = 1, m_minHeight = 1;
+	// Hidden buttons carrying the tab captions, so their &-mnemonics switch tabs.
+	std::array<CButton, TabCount> m_tabChangeBtns;
+
+	CString m_VSRCname;
+	CString m_VDSTname;
+	CString m_AVIPrefix, m_AVISuffix;
+	CString m_DTFormat, m_DTFormatHistory;
+	int m_nSuffixDigits = 2;
+
+	bool m_exitOnFinish = false;
 };
-
-//{{AFX_INSERT_LOCATION}}
-// Microsoft Visual C++ will insert additional declarations immediately before the previous line.
-
-#endif // !defined(AFX_DVTOOLSDLG_H__0633EC27_A5A4_4B4B_8547_D2DE0ADC9AC9__INCLUDED_)

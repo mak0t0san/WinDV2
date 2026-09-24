@@ -1,115 +1,78 @@
-// WinDV.cpp : Defines the class behaviors for the application.
-//
+// WinDV.cpp : application entry point
 
 #include "stdafx.h"
 #include "WinDV.h"
-#include "DropFilesEdit.h"
-#include "DShow.h"
-#include "ToolTab.h"
 #include "DVToolsDlg.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
-#undef THIS_FILE
-static char THIS_FILE[] = __FILE__;
 #endif
 
-/////////////////////////////////////////////////////////////////////////////
-// CWinDVApp
-
 BEGIN_MESSAGE_MAP(CWinDVApp, CWinApp)
-	//{{AFX_MSG_MAP(CWinDVApp)
-		// NOTE - the ClassWizard will add and remove mapping macros here.
-		//    DO NOT EDIT what you see in these blocks of generated code!
-	//}}AFX_MSG
-//	ON_COMMAND(ID_HELP, CWinApp::OnHelp)
 END_MESSAGE_MAP()
-
-/////////////////////////////////////////////////////////////////////////////
-// CWinDVApp construction
-
-CWinDVApp::CWinDVApp()
-{
-	// TODO: add construction code here,
-	// Place all significant initialization in InitInstance
-}
-
-/////////////////////////////////////////////////////////////////////////////
-// The one and only CWinDVApp object
 
 CWinDVApp theApp;
 
-/////////////////////////////////////////////////////////////////////////////
-// CWinDVApp initialization
-
 BOOL CWinDVApp::InitInstance()
 {
+	CWinApp::InitInstance();
 	AfxEnableControlContainer();
 
+	// Capture must keep up with the camcorder in real time.
 	SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 
-	// Standard initialization
-	// If you are not using these features and wish to reduce the size
-	//  of your final executable, you should remove from the following
-	//  the specific initialization routines you do not need.
+	// DirectShow objects are created and used from several threads, so the UI
+	// thread joins the multithreaded apartment too.
+	const HRESULT hrCom = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-#ifdef _AFXDLL
-	Enable3dControls();			// Call this when using MFC in a shared DLL
-#else
-	Enable3dControlsStatic();	// Call this when linking to MFC statically
-#endif
+	// Keep the original author's key so existing settings carry over.
+	SetRegistryKey(L"Petr Mourek");
 
-	CoInitializeEx(NULL, COINIT_MULTITHREADED);
-
-	SetRegistryKey("Petr Mourek");
-
-	CDVToolsDlg dlg;
-	m_pMainWnd = &dlg;
-	int nResponse = dlg.DoModal();
-	if (nResponse == IDOK)
 	{
-		// TODO: Place code here to handle when the dialog is
-		//  dismissed with OK
-	}
-	else if (nResponse == IDCANCEL)
-	{
-		// TODO: Place code here to handle when the dialog is
-		//  dismissed with Cancel
+		CDVToolsDlg dlg;
+		m_pMainWnd = &dlg;
+		dlg.DoModal();
+		m_pMainWnd = nullptr;
 	}
 
-	CoUninitialize();
-	// Since the dialog has been closed, return FALSE so that we exit the
-	//  application, rather than start the application's message pump.
+	if (SUCCEEDED(hrCom))
+		CoUninitialize();
+	// The dialog has closed; return FALSE to exit instead of starting a message pump.
 	return FALSE;
 }
 
-/////////////////////////////////////////////////////////////////////////////
-
-void SelectFile(BOOL open, CWnd *ctrl)
+void SelectFile(bool open, CWnd* ctrl)
 {
-	CFileDialog dlg(open, NULL, NULL, (open ? OFN_ALLOWMULTISELECT | OFN_HIDEREADONLY : 0),
-		"*.avi|*.avi||");
+	CFileDialog dlg(open, L"avi", nullptr, OFN_HIDEREADONLY | (open ? OFN_ALLOWMULTISELECT | OFN_FILEMUSTEXIST : 0),
+	                L"AVI files (*.avi)|*.avi|All files (*.*)|*.*||", ctrl);
 
-	dlg.m_ofn.lpstrInitialDir=".";
-	char fbuf[16384] = "";
-	dlg.m_ofn.lpstrFile = fbuf;
-	dlg.m_ofn.nMaxFile = sizeof fbuf;
-	if (dlg.DoModal() == IDOK) {
-		CString txt;
-		if (open) {
-			POSITION p = dlg.GetStartPosition();
-			while (p) {
-				txt += dlg.GetNextPathName(p);
-				if (p) txt += " | ";
-			}
+	// Room for a generous multi-selection; the dialog fails rather than
+	// truncating if it is exceeded.
+	std::vector<wchar_t> buffer(open ? 64 * 1024 : MAX_PATH * 4, L'\0');
+	dlg.m_ofn.lpstrFile = buffer.data();
+	dlg.m_ofn.nMaxFile = static_cast<DWORD>(buffer.size());
 
+	// Start in, and afterwards move, the working directory; relative paths in
+	// the file fields and the saved "WorkingDirectory" setting depend on it.
+	// The Vista-style dialog no longer changes it by itself.
+	std::vector<wchar_t> initialDir(GetCurrentDirectory(0, nullptr) + 1, L'\0');
+	GetCurrentDirectory(static_cast<DWORD>(initialDir.size()), initialDir.data());
+	dlg.m_ofn.lpstrInitialDir = initialDir.data();
+
+	if (dlg.DoModal() != IDOK)
+		return;
+	SetCurrentDirectory(dlg.GetFolderPath());
+
+	CString text;
+	if (open) {
+		POSITION pos = dlg.GetStartPosition();
+		while (pos) {
+			text += dlg.GetNextPathName(pos);
+			if (pos)
+				text += L" | ";
 		}
-		else
-			txt = dlg.GetPathName();
-
-		ctrl->SetWindowText(txt);
+	} else {
+		text = dlg.GetPathName();
 	}
-
+	ctrl->SetWindowText(text);
 }
-
-/////////////////////////////////////////////////////////////////////////////

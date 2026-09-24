@@ -1,54 +1,25 @@
-#if !defined(AFX_VIDEODEVICESEL_H__5B9B5B7A_A184_467F_B190_5447284D9A80__INCLUDED_)
-#define AFX_VIDEODEVICESEL_H__5B9B5B7A_A184_467F_B190_5447284D9A80__INCLUDED_
-
-#if _MSC_VER > 1000
+// VideoDeviceSel.h : dialog for picking a DV device
 #pragma once
-#endif // _MSC_VER > 1000
-// VideoDeviceSel.h : header file
-//
 
-/////////////////////////////////////////////////////////////////////////////
-// CVideoDeviceSel dialog
-
-class CVideoDeviceSel : public CDialog
-{
-// Construction
+class CVideoDeviceSel : public CDialog {
 public:
-	CVideoDeviceSel(CArray<CString,CString&> &list, LPCSTR selName, CWnd* pParent = NULL);   // standard constructor
+	CVideoDeviceSel(const std::vector<CString>& devices, const CString& selected, CWnd* pParent = nullptr);
 
-// Dialog Data
-	//{{AFX_DATA(CVideoDeviceSel)
 	enum { IDD = IDD_VIDEODEVICESEL };
-	CListBox	m_listbox;
-	//}}AFX_DATA
 
+	// Index into the device list, or -1 if nothing was chosen.
+	int GetSelection() const { return m_selected; }
 
-// Overrides
-	// ClassWizard generated virtual function overrides
-	//{{AFX_VIRTUAL(CVideoDeviceSel)
-	protected:
-	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
-	//}}AFX_VIRTUAL
-
-// Implementation
 protected:
-	CArray<CString,CString&> *m_list;
-	CString m_selName;
-	int m_selected;
-
-	// Generated message map functions
-	//{{AFX_MSG(CVideoDeviceSel)
+	void DoDataExchange(CDataExchange* pDX) override;
+	BOOL OnInitDialog() override;
+	void OnOK() override;
 	afx_msg void OnDblclkDevlist();
-	virtual void OnOK();
-	virtual BOOL OnInitDialog();
-	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 
-public: 
-	int GetSelection() {return m_selected;}
+private:
+	CListBox m_listbox;
+	const std::vector<CString>& m_devices;
+	CString m_selName;
+	int m_selected = -1;
 };
-
-//{{AFX_INSERT_LOCATION}}
-// Microsoft Visual C++ will insert additional declarations immediately before the previous line.
-
-#endif // !defined(AFX_VIDEODEVICESEL_H__5B9B5B7A_A184_467F_B190_5447284D9A80__INCLUDED_)

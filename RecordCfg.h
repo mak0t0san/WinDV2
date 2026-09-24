@@ -1,51 +1,25 @@
-#if !defined(AFX_RECORDCFG_H__C6EDDD3E_4F72_4E92_939C_B69F736C5612__INCLUDED_)
-#define AFX_RECORDCFG_H__C6EDDD3E_4F72_4E92_939C_B69F736C5612__INCLUDED_
-
-#if _MSC_VER > 1000
+// RecordCfg.h : "Record" settings page
 #pragma once
-#endif // _MSC_VER > 1000
-// RecordCfg.h : header file
-//
 
-/////////////////////////////////////////////////////////////////////////////
-// CRecordCfg dialog
+#include "DropFilesEdit.h"
 
-class CRecordCfg : public CPropertyPage
-{
-// Construction
+class CRecordCfg : public CPropertyPage {
 public:
-	CRecordCfg();   // standard constructor
+	CRecordCfg();
 
-// Dialog Data
-	//{{AFX_DATA(CRecordCfg)
 	enum { IDD = IDD_RECORD_CONFIG };
-	CDropFilesEdit	m_aviSuffixCtl;
-	CDropFilesEdit	m_aviPrefixCtl;
-	BOOL	m_recordPreview;
-	CString	m_aviPrefix;
-	CString	m_aviSuffix;
-	//}}AFX_DATA
 
+	BOOL m_recordPreview = FALSE;
+	CString m_aviPrefix; // files recorded before / after the selection
+	CString m_aviSuffix;
 
-// Overrides
-	// ClassWizard generated virtual function overrides
-	//{{AFX_VIRTUAL(CRecordCfg)
-	protected:
-	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
-	//}}AFX_VIRTUAL
-
-// Implementation
 protected:
-
-	// Generated message map functions
-	//{{AFX_MSG(CRecordCfg)
+	void DoDataExchange(CDataExchange* pDX) override;
 	afx_msg void OnPrefixSel();
 	afx_msg void OnSuffixSel();
-	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
+
+private:
+	CDropFilesEdit m_aviSuffixCtl;
+	CDropFilesEdit m_aviPrefixCtl;
 };
-
-//{{AFX_INSERT_LOCATION}}
-// Microsoft Visual C++ will insert additional declarations immediately before the previous line.
-
-#endif // !defined(AFX_RECORDCFG_H__C6EDDD3E_4F72_4E92_939C_B69F736C5612__INCLUDED_)

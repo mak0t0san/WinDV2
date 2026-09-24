@@ -1,653 +1,619 @@
+// DShow.cpp : DirectShow pipeline - DV frame sources, sinks and the CDV controller
+
 #include "stdafx.h"
-#include <process.h>
 #include "DShow.h"
-#include "DV.h"
 
-/////////////////////////////////////////////////////////////////////////////
+#include "CaptureNaming.h"
+#include "DVTimecode.h"
+#include "TimeFormat.h"
 
-inline void CHECK_HR(HRESULT hr, LPCSTR message = "Error", int cause = CDShowException::error) 
-{
-	if (hr != S_OK) ThrowDShowException(cause, message);
-}
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
 
-static void SetDVDecoding(IGraphBuilder *pFG, int full = 0)
-{
-	IBaseFilter *pDVFilt;
-	IIPDVDec *pDVDec;
-	HRESULT hr;
+namespace {
 
-	hr = pFG->FindFilterByName(L"DV Video Decoder", &pDVFilt);
-	if (hr == S_OK) {
-		hr = pDVFilt->QueryInterface(IID_IIPDVDec, (void**)&pDVDec);
-		if (hr == S_OK) {
-			pDVDec->put_IPDisplay(full ? DVDECODERRESOLUTION_720x480 : DVDECODERRESOLUTION_360x240);
-		}
-		pDVFilt->Release();
+constexpr std::size_t kQueueFrames = 100;
+constexpr long kMinDVSampleSize = static_cast<long>(windv::kDVFrameSizePAL);
+
+// Initializes COM on a worker thread for as long as the object lives.
+class ComApartment {
+public:
+	ComApartment() : m_hr(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) {}
+	~ComApartment()
+	{
+		if (SUCCEEDED(m_hr))
+			CoUninitialize();
 	}
+	ComApartment(const ComApartment&) = delete;
+	ComApartment& operator=(const ComApartment&) = delete;
+
+private:
+	HRESULT m_hr;
+};
+
+CString FormatMessageWithResult(const CString& message, HRESULT hr)
+{
+	if (hr == S_OK)
+		return message;
+
+	WCHAR text[MAX_ERROR_TEXT_LEN] = L"";
+	AMGetErrorTextW(hr, text, MAX_ERROR_TEXT_LEN);
+	CString result;
+	CString description(text);
+	description.TrimRight();
+	if (description.IsEmpty())
+		result.Format(L"%s (0x%08lX)", message.GetString(), static_cast<unsigned long>(hr));
+	else
+		result.Format(L"%s (0x%08lX: %s)", message.GetString(), static_cast<unsigned long>(hr), description.GetString());
+	return result;
 }
 
-
-static void EnumVideoDevices(BOOL record, LPCSTR device, CArray<CString,CString &> &list, IBaseFilter ** pfilter)
+void SetDVDecoding(IGraphBuilder* graph, bool fullResolution)
 {
-	HRESULT hr;
+	CComPtr<IBaseFilter> decoder;
+	if (graph->FindFilterByName(L"DV Video Decoder", &decoder) != S_OK)
+		return;
+	if (CComQIPtr<IIPDVDec> dvDec = decoder)
+		dvDec->put_IPDisplay(fullResolution ? DVDECODERRESOLUTION_720x480 : DVDECODERRESOLUTION_360x240);
+}
 
-	if (pfilter) *pfilter = NULL;
+// Calls visit(friendlyName, moniker) for every video capture device.
+template <typename Visitor>
+void ForEachVideoDevice(Visitor&& visit)
+{
+	CComPtr<ICreateDevEnum> devEnum;
+	CheckHR(devEnum.CoCreateInstance(CLSID_SystemDeviceEnum), L"Can't create the system device enumerator");
 
-    ICreateDevEnum *pCreateDevEnum;
-    hr = CoCreateInstance(CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC,
-			  IID_ICreateDevEnum, (void**)&pCreateDevEnum);
-    CHECK_HR(hr);
-    IEnumMoniker *pEm;
-    hr = pCreateDevEnum->CreateClassEnumerator(CLSID_VideoInputDeviceCategory,
-								&pEm, 0);
-    pCreateDevEnum->Release();
-	CHECK_HR(hr, "No video device found", CDShowException::deviceNotFound);
-    pEm->Reset();
-    ULONG cFetched;
-    IMoniker *pM;
-    while(hr = pEm->Next(1, &pM, &cFetched), hr==S_OK)
-    {
-	    IPropertyBag *pBag;
-	    hr = pM->BindToStorage(0, 0, IID_IPropertyBag, (void **)&pBag);
-	    if(SUCCEEDED(hr)) {
-			VARIANT varName;
-			varName.vt = VT_BSTR;
-			hr = pBag->Read(L"FriendlyName", &varName, NULL);
-			CHECK_HR(hr);
-			pBag->Release();
-			CString tmp = varName.bstrVal;
-			list.Add(tmp);
-			if (device && pfilter && tmp == device && !*pfilter) {
-				hr = pM->BindToObject(NULL, NULL, IID_IBaseFilter, (void **)pfilter);
-				CHECK_HR(hr);
+	CComPtr<IEnumMoniker> monikers;
+	const HRESULT hr = devEnum->CreateClassEnumerator(CLSID_VideoInputDeviceCategory, &monikers, 0);
+	CheckSucceeded(hr, L"Can't enumerate video devices");
+	if (hr != S_OK) // S_FALSE: the category is empty
+		return;
+
+	CComPtr<IMoniker> moniker;
+	while (monikers->Next(1, &moniker, nullptr) == S_OK) {
+		CComPtr<IPropertyBag> bag;
+		if (SUCCEEDED(moniker->BindToStorage(nullptr, nullptr, IID_PPV_ARGS(&bag)))) {
+			CComVariant name;
+			if (SUCCEEDED(bag->Read(L"FriendlyName", &name, nullptr)) && name.vt == VT_BSTR) {
+				if (!visit(CString(name.bstrVal), moniker.p))
+					return;
 			}
-			SysFreeString(varName.bstrVal);
 		}
-		pM->Release();
-    }
-    pEm->Release();
-
-	if (pfilter && !*pfilter) ThrowDShowException(CDShowException::deviceNotFound, "Device not found");
-}
-
-void GetVideoSrcList(CArray<CString,CString &> &list)
-{
-	EnumVideoDevices(FALSE, NULL, list, NULL);
-}
-
-
-void GetVideoDstList(CArray<CString,CString &> &list)
-{
-	EnumVideoDevices(TRUE, NULL, list, NULL);
-}
-
-static CString GetCaptureFilename(LPCSTR base, LPCSTR dtformat, int ndigits, time_t tim)
-{
-	CString basdattim = base;
-	if (tim <= 0) tim = time(NULL);
-	CString tmp = FormatTime(dtformat, tim);
-	if (!tmp.IsEmpty()) {
-		basdattim += ".";
-		basdattim += tmp;
+		moniker.Release();
 	}
-	tmp = basdattim;
-	int bassiz = 0;
-	int i = basdattim.GetLength();
-	while (i) {
-		i--;
-		switch (basdattim[i]) {
-		case '\\':
-		case '/':
-		case ':':
-			goto endwhile;
-		}
-		bassiz++;
-	}
-endwhile:
+}
 
-	tmp += ".*.avi";
+CComPtr<IBaseFilter> FindVideoDevice(const CString& device)
+{
+	CComPtr<IBaseFilter> filter;
+	ForEachVideoDevice([&](const CString& name, IMoniker* moniker) {
+		if (name != device)
+			return true;
+		CheckHR(moniker->BindToObject(nullptr, nullptr, IID_PPV_ARGS(&filter)), L"Can't open the video device");
+		return false;
+	});
+	if (!filter)
+		throw DShowError(L"Video device \"" + device + L"\" not found", S_OK, DShowError::Cause::DeviceNotFound);
+	return filter;
+}
 
-	int max = -1;
-	int maxn = ndigits;
+// Next free capture filename for base + formatted date (see CaptureNaming.h).
+CString NextCaptureFilename(const CString& base, const CString& dtformat, int ndigits, std::time_t tim)
+{
+	if (tim <= 0)
+		tim = std::time(nullptr);
+	const std::wstring stem = windv::CaptureStem(base.GetString(), windv::FormatTime(dtformat.GetString(), tim));
 
-	CFileFind ff;
-	BOOL found = ff.FindFile(tmp);
+	std::vector<std::wstring> existing;
+	CFileFind finder;
+	BOOL found = finder.FindFile(windv::CaptureSearchPattern(stem).c_str());
 	while (found) {
-		found = ff.FindNextFile();
-		tmp = ff.GetFileName();
-		int l = tmp.GetLength() - bassiz - 5;
-		if (l > 0 && l >= maxn) {
-			tmp = tmp.Mid(bassiz+1,l);
-			int j = 0;
-			for(i=0; i<l; i++) {
-				if (!isdigit(tmp[i])) goto next;
-				j = j*10 + (tmp[i]-'0');
-			}
-			if (l>maxn) {
-				maxn = l; max = j;
-			}
-			else if (j > max) max = j;
-		}
-next:;
+		found = finder.FindNextFile();
+		existing.emplace_back(finder.GetFileName().GetString());
 	}
-	ff.Close();
+	return windv::NextCaptureFilename(stem, ndigits, existing).c_str();
+}
 
-	tmp = basdattim;
+} // namespace
 
-	CString num;
-	num.Format(".%0*d", maxn, max+1);
+/////////////////////////////////////////////////////////////////////////////
+// Errors
 
-	if (!maxn) {
-		if (ff.FindFile(basdattim+".avi")) maxn++;
+DShowError::DShowError(const CString& message, HRESULT hr, Cause cause)
+    : std::runtime_error(CStringA(FormatMessageWithResult(message, hr)).GetString()),
+      m_message(FormatMessageWithResult(message, hr)), m_hr(hr), m_cause(cause)
+{
+}
 
-		ff.Close();
+void CheckHR(HRESULT hr, LPCWSTR what)
+{
+	if (hr != S_OK)
+		throw DShowError(what, hr);
+}
 
-	}
+void CheckSucceeded(HRESULT hr, LPCWSTR what)
+{
+	if (FAILED(hr))
+		throw DShowError(what, hr);
+}
 
-	if (maxn) tmp += num;
-
-	return tmp + ".avi";
+std::vector<CString> GetVideoDeviceList()
+{
+	std::vector<CString> list;
+	ForEachVideoDevice([&](const CString& name, IMoniker*) {
+		list.push_back(name);
+		return true;
+	});
+	return list;
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
-CDShowException::CDShowException(BOOL b_AutoDelete, int cause, LPCSTR message)
-: CException(b_AutoDelete)
-{
-	m_cause = cause;
-	m_message = message;
-}
-
-BOOL CDShowException::GetErrorMessage(LPTSTR lpszError, UINT nMaxError, PUINT pnHelpContext)
-{
-	lstrcpyn(lpszError, m_message, nMaxError);
-	if (pnHelpContext) *pnHelpContext = 0;
-	return TRUE;
-}
-
-void ThrowDShowException(int cause, LPCSTR message)
-{
-	THROW(new CDShowException(TRUE, cause, message));
-}
-
-/////////////////////////////////////////////////////////////////////////////
+// CFilterGraph
 
 CFilterGraph::CFilterGraph()
 {
-	HRESULT hr;
-	hr = CoCreateInstance((REFCLSID)CLSID_CaptureGraphBuilder2,
-				  NULL, CLSCTX_INPROC, (REFIID)IID_ICaptureGraphBuilder2,
-				  (void **)&m_GB);
-	CHECK_HR(hr, "Can't create CaptureGraphBuilder");
-
-	hr = CoCreateInstance((REFCLSID)CLSID_FilterGraph,
-				  NULL, CLSCTX_INPROC, (REFIID)IID_IGraphBuilder,
-				  (void **)&m_FG);
-	CHECK_HR(hr, "Can't create FilterGraph");
-
-	hr = m_GB->SetFiltergraph(m_FG);
-	CHECK_HR(hr);
-
-	hr = m_FG->QueryInterface(IID_IMediaControl, (void **)&m_MC);
-	CHECK_HR(hr);
-
-	hr = m_FG->QueryInterface(IID_IMediaSeeking, (void **)&m_MS);
-	CHECK_HR(hr);
-
-	hr = m_FG->QueryInterface(IID_IMediaEventEx, (void **)&m_ME);
-	CHECK_HR(hr);
+	CheckHR(m_GB.CoCreateInstance(CLSID_CaptureGraphBuilder2), L"Can't create CaptureGraphBuilder");
+	CheckHR(m_FG.CoCreateInstance(CLSID_FilterGraph), L"Can't create FilterGraph");
+	CheckHR(m_GB->SetFiltergraph(m_FG), L"Can't attach the filter graph");
+	CheckHR(m_FG.QueryInterface(&m_MC), L"Can't get IMediaControl");
+	CheckHR(m_FG.QueryInterface(&m_MS), L"Can't get IMediaSeeking");
+	CheckHR(m_FG.QueryInterface(&m_ME), L"Can't get IMediaEventEx");
 }
 
 CFilterGraph::~CFilterGraph()
 {
-	if (m_MC) {m_MC->Stop(); m_MC->Release();}
-	if (m_MS) m_MS->Release();
-	if (m_ME) m_ME->Release();
-	if (m_FG) m_FG->Release();
-	if (m_GB) m_GB->Release();
+	if (m_MC)
+		m_MC->Stop();
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// CInputGraph
+
+class CInputGraph::CInputFilter : public CBaseFilter {
+public:
+	explicit CInputFilter(CInputGraph* graph)
+	    : CBaseFilter(NAME("DV Destination"), nullptr, &m_lock, CLSID_NULL), m_graph(graph)
+	{
+		HRESULT hr = S_OK;
+		m_input = std::make_unique<CInputPin>(this, &m_lock, &hr);
+		CheckHR(hr, L"Can't create the input pin");
+	}
+
+	int GetPinCount() override { return 1; }
+	CBasePin* GetPin(int n) override { return n == 0 ? m_input.get() : nullptr; }
+
+	std::atomic<CInputGraph*> m_graph;
+
+	class CInputPin : public CBaseInputPin {
+	public:
+		CInputPin(CInputFilter* filter, CCritSec* lock, HRESULT* phr)
+		    : CBaseInputPin(NAME("Input"), filter, lock, phr, L"Input")
+		{
+		}
+
+		HRESULT CheckMediaType(const CMediaType* pmt) override
+		{
+			return *pmt->Type() == MEDIATYPE_Interleaved ? S_OK : S_FALSE;
+		}
+
+		STDMETHODIMP Receive(IMediaSample* sample) override
+		{
+			HRESULT hr = CBaseInputPin::Receive(sample);
+			if (hr != S_OK)
+				return hr;
+
+			CFrameHandler* handler = Handler();
+			if (!handler)
+				return S_OK;
+
+			REFERENCE_TIME start = 0, end = 0;
+			if (FAILED(sample->GetTime(&start, &end)))
+				start = end = 0;
+			BYTE* data = nullptr;
+			if (FAILED(sample->GetPointer(&data)))
+				return E_UNEXPECTED;
+			const long length = sample->GetActualDataLength();
+
+			// Exceptions must not cross the COM boundary into the upstream filter.
+			try {
+				handler->HandleFrame(end - start, {data, static_cast<std::size_t>(length)});
+			} catch (...) {
+				return E_FAIL;
+			}
+			return S_OK;
+		}
+
+		STDMETHODIMP EndOfStream() override
+		{
+			if (CFrameHandler* handler = Handler()) {
+				try {
+					handler->EndOfStream();
+				} catch (...) {
+					return E_FAIL;
+				}
+			}
+			return S_OK;
+		}
+
+	private:
+		CFrameHandler* Handler() const
+		{
+			CInputGraph* graph = static_cast<CInputFilter*>(m_pFilter)->m_graph.load();
+			return graph ? graph->m_handler.load() : nullptr;
+		}
+	};
+
+	std::unique_ptr<CInputPin> m_input;
+
+private:
+	CCritSec m_lock;
+};
 
 CInputGraph::CInputGraph()
-: m_handler(NULL)
 {
-	HRESULT hr;
-
-	m_inputFilter = new CInputFilter(this); m_inputFilter->AddRef();
-
-	hr = m_FG->AddFilter(m_inputFilter, L"InputFilter");
-
+	m_inputFilter = new CInputFilter(this);
+	m_inputFilterRef = m_inputFilter;
+	CheckHR(m_FG->AddFilter(m_inputFilterRef, L"InputFilter"), L"Can't add the input filter");
 }
 
 CInputGraph::~CInputGraph()
 {
 	Stop();
-	m_inputFilter->m_graph = NULL;
-	m_inputFilter->Release();
+	m_inputFilter->m_graph = nullptr;
 }
 
-void CInputGraph::Run(CFrameHandler *handler)
+IPin* CInputGraph::InputPin() const
+{
+	return m_inputFilter->m_input.get();
+}
+
+bool CInputGraph::IsInputConnected() const
+{
+	return m_inputFilter->m_input->IsConnected() != FALSE;
+}
+
+void CInputGraph::Run(CFrameHandler* handler)
 {
 	m_handler = handler;
-	m_MC->Run();
+	CheckSucceeded(m_MC->Run(), L"Can't start the source graph");
 }
 
 void CInputGraph::Stop()
 {
-	if (m_MC) m_MC->Stop();
-	m_handler = NULL;
+	if (m_MC)
+		m_MC->Stop();
+	m_handler = nullptr;
 }
 
-void CInputGraph::GetMediaType(CMediaType *type)
+void CInputGraph::GetMediaType(CMediaType* type)
 {
-	AM_MEDIA_TYPE mt;
-	m_inputFilter->m_input->ConnectionMediaType(&mt);
+	AM_MEDIA_TYPE mt{};
+	CheckHR(m_inputFilter->m_input->ConnectionMediaType(&mt), L"The source is not connected");
 	*type = mt;
-	DVINFO *dvinfo = (DVINFO *)mt.pbFormat;
 	FreeMediaType(mt);
-	long l = type->GetSampleSize();
-	if (l < 144000) type->SetSampleSize(144000);
-}
-
-
-CInputGraph::CInputFilter::CInputFilter(CInputGraph *graph)
-: CBaseFilter(NAME("DV Destination"), NULL, &m_cs, (REFIID)CLSID_NULL), m_graph(graph)
-{
-	HRESULT hr = NOERROR;
-	m_input = new CInputPin(this, &m_cs, &hr);
-}
-
-CInputGraph::CInputFilter::~CInputFilter()
-{
-	delete m_input;
-}
-
-int CInputGraph::CInputFilter::GetPinCount()
-{
-	return 1;
-}
-
-CBasePin *CInputGraph::CInputFilter::GetPin(int n)
-{
-	return m_input;
-}
-
-CInputGraph::CInputFilter::CInputPin::CInputPin(CInputFilter *pFilter, CCritSec *cs, HRESULT *phr)
-: CBaseInputPin(NAME("Input"), pFilter, cs, phr, L"Input")
-{
-}
-
-HRESULT CInputGraph::CInputFilter::CInputPin::CheckMediaType(const CMediaType *pmt)
-{
-	if (*pmt->Type() == MEDIATYPE_Interleaved) return S_OK;
-	return S_FALSE;
-}
-
-STDMETHODIMP CInputGraph::CInputFilter::CInputPin::Receive(IMediaSample *pSample)
-{
-	HRESULT hr = CBaseInputPin::Receive(pSample);
-	if (hr != NOERROR) return hr;
-
-	REFERENCE_TIME startTime, endTime;
-	pSample->GetTime(&startTime, &endTime);
-	BYTE *ptr;
-	pSample->GetPointer(&ptr);
-	long len = pSample->GetActualDataLength();
-	((CInputFilter *)m_pFilter)->m_graph->m_handler->HandleFrame(endTime - startTime, ptr, len);
-	return hr;
-}
-
-STDMETHODIMP CInputGraph::CInputFilter::CInputPin::EndOfStream()
-{
-	((CInputFilter *)m_pFilter)->m_graph->m_handler->HandleFrame(-1, NULL, 0);
-	return NOERROR;
+	if (type->GetSampleSize() < kMinDVSampleSize)
+		type->SetSampleSize(kMinDVSampleSize);
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// COutputGraph
 
-COutputGraph::COutputGraph(CMediaType *type, int queue)
-: m_time(0), m_type(*type), m_queue(queue)
-{
-	HRESULT hr;
+class COutputGraph::COutputFilter : public CBaseFilter {
+public:
+	explicit COutputFilter(COutputGraph* graph)
+	    : CBaseFilter(NAME("DV Source"), nullptr, &m_lock, CLSID_NULL), m_graph(graph)
+	{
+		HRESULT hr = S_OK;
+		m_output = std::make_unique<COutputPin>(this, &m_lock, &hr);
+		CheckHR(hr, L"Can't create the output pin");
+	}
 
-	m_outputFilter = new COutputFilter(this); m_outputFilter->AddRef();
+	int GetPinCount() override { return 1; }
+	CBasePin* GetPin(int n) override { return n == 0 ? m_output.get() : nullptr; }
 
-	hr = m_FG->AddFilter(m_outputFilter, L"OutputFilter");
-}
+	COutputGraph* m_graph;
 
-struct FrameInfo {
-	REFERENCE_TIME duration;
-	BYTE *data;
-	int len;
+	class COutputPin : public CBaseOutputPin {
+	public:
+		COutputPin(COutputFilter* filter, CCritSec* lock, HRESULT* phr)
+		    : CBaseOutputPin(NAME("Output"), filter, lock, phr, L"Output")
+		{
+		}
+
+		HRESULT GetMediaType(int position, CMediaType* pmt) override
+		{
+			if (position < 0)
+				return E_INVALIDARG;
+			if (position > 0)
+				return VFW_S_NO_MORE_ITEMS;
+			*pmt = Graph()->m_type;
+			return S_OK;
+		}
+
+		HRESULT CheckMediaType(const CMediaType* pmt) override { return *pmt == Graph()->m_type ? S_OK : S_FALSE; }
+
+		HRESULT DecideBufferSize(IMemAllocator* allocator, ALLOCATOR_PROPERTIES* request) override
+		{
+			const long sampleSize = static_cast<long>(Graph()->m_type.GetSampleSize());
+			request->cbAlign = (std::max)(request->cbAlign, 1L);
+			request->cbBuffer = (std::max)(request->cbBuffer, sampleSize);
+			request->cBuffers = (std::max)(request->cBuffers, static_cast<long>((std::max)(Graph()->m_queueDepth, 1)));
+
+			ALLOCATOR_PROPERTIES actual{};
+			const HRESULT hr = allocator->SetProperties(request, &actual);
+			if (FAILED(hr))
+				return hr;
+			return actual.cbBuffer < sampleSize ? E_FAIL : S_OK;
+		}
+
+		HRESULT Deliver(IMediaSample* sample) override
+		{
+			if (m_queue) {
+				sample->AddRef(); // COutputQueue::Receive takes over a reference
+				return m_queue->Receive(sample);
+			}
+			return CBaseOutputPin::Deliver(sample);
+		}
+
+		HRESULT DeliverEndOfStream() override
+		{
+			if (m_queue) {
+				m_queue->EOS();
+				return S_OK;
+			}
+			return CBaseOutputPin::DeliverEndOfStream();
+		}
+
+		HRESULT Active() override
+		{
+			const int depth = Graph()->m_queueDepth;
+			if (depth > 0) {
+				HRESULT hr = S_OK;
+				m_queue = std::make_unique<COutputQueue>(GetConnected(), &hr, FALSE, TRUE, 1, FALSE, depth,
+				                                         THREAD_PRIORITY_ABOVE_NORMAL);
+				if (FAILED(hr)) {
+					m_queue.reset();
+					return hr;
+				}
+			}
+			return CBaseOutputPin::Active();
+		}
+
+		HRESULT Inactive() override
+		{
+			m_queue.reset();
+			return CBaseOutputPin::Inactive();
+		}
+
+	private:
+		COutputGraph* Graph() const { return static_cast<COutputFilter*>(m_pFilter)->m_graph; }
+
+		std::unique_ptr<COutputQueue> m_queue;
+	};
+
+	std::unique_ptr<COutputPin> m_output;
+
+private:
+	CCritSec m_lock;
 };
 
-
-void COutputGraph::HandleFrame(REFERENCE_TIME duration, BYTE *data, int len)
+COutputGraph::COutputGraph(const CMediaType& type, int queueDepth) : m_type(type), m_queueDepth(queueDepth)
 {
-	if (data) {
-		IMediaSample *pSample = NULL;
-		HRESULT hr;
-		
-		hr = m_outputFilter->m_output->GetDeliveryBuffer(&pSample, NULL, NULL, 0);
-		CHECK_HR(hr);
-
-		BYTE *ptr;
-
-		pSample->GetPointer(&ptr);
-
-		CopyMemory(ptr, data, len);
-		pSample->SetActualDataLength(len);
-
-		REFERENCE_TIME newTime = m_time + duration;
-		if (duration) pSample->SetTime(&m_time, &newTime);
-		m_time = newTime;
-		pSample->SetSyncPoint(true);
-
-		m_outputFilter->m_output->Deliver(pSample);
-
-		pSample->Release();
-	}
+	m_outputFilter = new COutputFilter(this);
+	m_outputFilterRef = m_outputFilter;
+	CheckHR(m_FG->AddFilter(m_outputFilterRef, L"OutputFilter"), L"Can't add the output filter");
 }
-
 
 COutputGraph::~COutputGraph()
 {
-	m_outputFilter->Release();
+	if (m_MC)
+		m_MC->Stop();
 }
 
-
-COutputGraph::COutputFilter::COutputFilter(COutputGraph *graph)
-: CBaseFilter(NAME("DV Source"), NULL, &m_cs, (REFIID)CLSID_NULL), m_graph(graph)
+HRESULT COutputGraph::GetDeliveryBuffer(IMediaSample** sample)
 {
-	HRESULT hr = NOERROR;
-	m_output = new COutputPin(this, &m_cs, &hr);
+	return m_outputFilter->m_output->GetDeliveryBuffer(sample, nullptr, nullptr, 0);
 }
 
-COutputGraph::COutputFilter::~COutputFilter()
+HRESULT COutputGraph::Deliver(IMediaSample* sample)
 {
-	delete m_output;
+	return m_outputFilter->m_output->Deliver(sample);
 }
 
-int COutputGraph::COutputFilter::GetPinCount()
+void COutputGraph::DeliverEndOfStream()
 {
-	return 1;
+	m_outputFilter->m_output->DeliverEndOfStream();
 }
 
-CBasePin *COutputGraph::COutputFilter::GetPin(int n)
+void COutputGraph::WaitForCompletion()
 {
-	return m_output;
+	long evCode = 0;
+	m_ME->WaitForCompletion(5000, &evCode);
 }
 
-COutputGraph::COutputFilter::COutputPin::COutputPin(COutputFilter *pFilter, CCritSec *cs, HRESULT *phr)
-: CBaseOutputPin(NAME("Output"), pFilter, cs, phr, L"Output"), m_queue(NULL)
+void COutputGraph::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame)
 {
-}
+	CComPtr<IMediaSample> sample;
+	CheckHR(GetDeliveryBuffer(&sample), L"Can't get an output buffer");
+	if (frame.size() > static_cast<std::size_t>(sample->GetSize()))
+		throw DShowError(L"DV frame is larger than the output buffer");
 
-HRESULT COutputGraph::COutputFilter::COutputPin::GetMediaType(int iPosition, CMediaType *pmt)
-{
-	if (iPosition > 0) return VFW_S_NO_MORE_ITEMS;
-	*pmt = (((COutputFilter*)m_pFilter)->m_graph->m_type);
-	return S_OK;
-}
+	BYTE* data = nullptr;
+	CheckHR(sample->GetPointer(&data), L"Can't access the output buffer");
+	std::copy(frame.begin(), frame.end(), data);
+	sample->SetActualDataLength(static_cast<long>(frame.size()));
 
-HRESULT COutputGraph::COutputFilter::COutputPin::CheckMediaType(const CMediaType *pmt)
-{
-	if (*pmt != (((COutputFilter*)m_pFilter)->m_graph->m_type)) return S_FALSE;
-	return S_OK;
-}
+	REFERENCE_TIME end = m_time + duration;
+	if (duration)
+		sample->SetTime(&m_time, &end);
+	m_time = end;
+	sample->SetSyncPoint(TRUE);
 
-
-HRESULT COutputGraph::COutputFilter::COutputPin::DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *ppropInputRequest)
-{
-	ALLOCATOR_PROPERTIES actual;
-	CMediaType mt = ((COutputFilter*)m_pFilter)->m_graph->m_type;
-	if (ppropInputRequest->cbAlign < 1) ppropInputRequest->cbAlign = 1;
-	if ((unsigned)ppropInputRequest->cbBuffer < (unsigned)mt.lSampleSize) ppropInputRequest->cbBuffer = mt.lSampleSize;
-	int queue = ((COutputFilter*)m_pFilter)->m_graph->m_queue;
-	queue = queue > 1 ? queue : 1;
-	if (ppropInputRequest->cBuffers<queue) ppropInputRequest->cBuffers = queue;
-	pAlloc->SetProperties(ppropInputRequest, &actual);
-	return S_OK;
-}
-
-HRESULT COutputGraph::COutputFilter::COutputPin::Deliver(IMediaSample *pSample)
-{
-	if (m_queue) {
-		pSample->AddRef();
-		return m_queue->Receive(pSample);
-	}
-	else
-		return CBaseOutputPin::Deliver(pSample);
-}
-
-HRESULT COutputGraph::COutputFilter::COutputPin::DeliverEndOfStream()
-{
-	if (m_queue) {
-		m_queue->EOS();
-		return S_OK;
-	}
-	else
-		return CBaseOutputPin::DeliverEndOfStream();
-}
-
-HRESULT COutputGraph::COutputFilter::COutputPin::Active()
-{
-	int queue = ((COutputFilter*)m_pFilter)->m_graph->m_queue;
-	if (queue > 0) {
-		HRESULT hr = S_OK;
-		m_queue = new COutputQueue(GetConnected(), &hr, FALSE, TRUE, 1, FALSE, queue, THREAD_PRIORITY_ABOVE_NORMAL);
-	}
-	return CBaseOutputPin::Active();
-}
-
-HRESULT COutputGraph::COutputFilter::COutputPin::Inactive()
-{
-	if (m_queue) {
-		delete m_queue;
-		m_queue = NULL;
-	}
-	return CBaseOutputPin::Inactive();
+	Deliver(sample);
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// CAVIReader
 
-CAVIReader::CAVIReader(LPCSTR filename)
+CAVIReader::CAVIReader(const CString& filename)
 {
-	HRESULT hr;
+	CComPtr<IBaseFilter> source;
+	CheckSucceeded(m_FG->AddSourceFilter(filename, L"File source", &source), L"Can't open " + filename);
 
-	IBaseFilter *pFSRC;
-	WCHAR wbuf[256];
-	MultiByteToWideChar(CP_ACP, 0, filename, -1, wbuf, sizeof wbuf/ sizeof (WCHAR));
-	hr = m_FG->AddSourceFilter(wbuf, L"File source", &pFSRC);
-	IBaseFilter * pAVI;
-	hr = CoCreateInstance((REFCLSID)CLSID_AviSplitter,
-						  NULL, CLSCTX_INPROC, (REFIID)IID_IBaseFilter,
-						  (void **)&pAVI);
-	hr = m_FG->AddFilter(pAVI, L"AVI Splitter");
-	CHECK_HR(hr);
-	hr = m_GB->RenderStream(NULL, NULL, pFSRC, NULL, pAVI);
-	pFSRC->Release();
-	CHECK_HR(hr);
-	hr = m_GB->RenderStream(NULL, &MEDIATYPE_Interleaved, pAVI, NULL, m_inputFilter);
-	if (hr != NOERROR || !m_inputFilter->m_input->IsConnected()) {
- 	  IBaseFilter * pDVMux;
-	  hr = CoCreateInstance((REFCLSID)CLSID_DVMux,
-						  NULL, CLSCTX_INPROC, (REFIID)IID_IBaseFilter,
-						  (void **)&pDVMux);
-	  hr = m_FG->AddFilter(pDVMux, L"DV muxer");
-  	  CHECK_HR(hr);
-	  hr = m_GB->RenderStream(NULL, &MEDIATYPE_Video, pAVI, NULL, pDVMux);
-	  hr = m_GB->RenderStream(NULL, &MEDIATYPE_Audio, pAVI, NULL, pDVMux);
-	  hr = m_GB->RenderStream(NULL, NULL, pDVMux, NULL, m_inputFilter);
-	  pDVMux->Release();
+	CComPtr<IBaseFilter> splitter;
+	CheckHR(splitter.CoCreateInstance(CLSID_AviSplitter), L"Can't create the AVI splitter");
+	CheckHR(m_FG->AddFilter(splitter, L"AVI Splitter"), L"Can't add the AVI splitter");
+	CheckHR(m_GB->RenderStream(nullptr, nullptr, source, nullptr, splitter), filename + L" is not an AVI file");
+
+	// Type-1 AVI: the interleaved DV stream connects directly.
+	const HRESULT hr = m_GB->RenderStream(nullptr, &MEDIATYPE_Interleaved, splitter, nullptr, m_inputFilterRef);
+	if (hr != S_OK || !IsInputConnected()) {
+		// Type-2 AVI: separate video and audio streams go back through the DV muxer.
+		CComPtr<IBaseFilter> muxer;
+		CheckHR(muxer.CoCreateInstance(CLSID_DVMux), L"Can't create the DV muxer");
+		CheckHR(m_FG->AddFilter(muxer, L"DV muxer"), L"Can't add the DV muxer");
+		CheckSucceeded(m_GB->RenderStream(nullptr, &MEDIATYPE_Video, splitter, nullptr, muxer),
+		               filename + L" has no DV video stream");
+		m_GB->RenderStream(nullptr, &MEDIATYPE_Audio, splitter, nullptr, muxer); // audio is optional
+		CheckSucceeded(m_GB->RenderStream(nullptr, nullptr, muxer, nullptr, m_inputFilterRef),
+		               filename + L" is not a DV AVI file");
 	}
-	pAVI->Release();
+	if (!IsInputConnected())
+		throw DShowError(filename + L" is not a DV AVI file");
 #ifdef DEBUG
 	DumpGraph(m_FG, 0);
 #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// CAVIJoiner
 
-static UINT JoinerThread(LPVOID ptr)
+CAVIJoiner::CAVIJoiner(const CString& filenames)
 {
-	((CAVIJoiner *)ptr)->JoinerThread();
-	return 0;
-}
+	int pos = 0;
+	while (pos >= 0) {
+		CString pattern = filenames.Tokenize(L"|", pos);
+		if (pos < 0)
+			break;
+		pattern.Trim();
+		if (pattern.IsEmpty())
+			continue;
 
-static int CompareStrings(const void *a, const void *b)
-{
-	return ((CString *)a)->CompareNoCase(*(CString *)b);
-}
-
-CAVIJoiner::CAVIJoiner(LPCSTR filenames)
-: m_joinHandler(NULL), m_current(0), m_stopping(FALSE),
-  m_reader(NULL), m_thread(NULL)
-{
-	CString flnms = filenames;
-	
-	while (!flnms.IsEmpty()) {
-
-		CString filename = flnms.SpanExcluding("|");
-		flnms = filename.GetLength() < flnms.GetLength() ? flnms.Mid(filename.GetLength()+1) : "";
-
-		filename.TrimLeft(); filename.TrimRight();
-
-		if (!filename.IsEmpty()) {
-			CArray<CString,CString&> files;
-			CFileFind finder;
-			BOOL found;
-			found = finder.FindFile(filename);
-			if (!found) ThrowDShowException(CDShowException::error, filename + ": file not found");
-			while (found) {
-				found = finder.FindNextFile();
-				files.Add(finder.GetFilePath());
-			}
-			if (files.GetSize()) {
-				CString *ptr = files.GetData();
-				qsort(ptr, files.GetSize(), sizeof (CString), CompareStrings);
-			}
-			for(int i = 0; i<files.GetSize(); i++) {
-				m_filenames.Add(files[i]);
-			}
-
+		std::vector<CString> matches;
+		CFileFind finder;
+		BOOL found = finder.FindFile(pattern);
+		if (!found)
+			throw DShowError(pattern + L": file not found");
+		while (found) {
+			found = finder.FindNextFile();
+			if (!finder.IsDirectory())
+				matches.push_back(finder.GetFilePath());
 		}
-
-	}
-	if (m_current < m_filenames.GetSize()) {
-		m_reader = new CAVIReader(m_filenames[m_current]);
-		m_current++;
-	}
-	else {
-		ThrowDShowException(CDShowException::error, "No file selected");
+		std::ranges::sort(matches, [](const CString& a, const CString& b) { return a.CompareNoCase(b) < 0; });
+		m_filenames.insert(m_filenames.end(), matches.begin(), matches.end());
 	}
 
+	if (m_filenames.empty())
+		throw DShowError(L"No file selected");
+	m_reader = std::make_unique<CAVIReader>(m_filenames[m_next++]);
 }
 
 CAVIJoiner::~CAVIJoiner()
 {
 	Stop();
-	delete m_reader;
 }
 
-void CAVIJoiner::GetMediaType(CMediaType *type)
+void CAVIJoiner::GetMediaType(CMediaType* type)
 {
 	m_reader->GetMediaType(type);
 }
 
-void CAVIJoiner::Run(CFrameHandler *handler)
+void CAVIJoiner::Run(CFrameHandler* handler)
 {
-	m_joinHandler = handler;
-
-	m_thread = AfxBeginThread(::JoinerThread,this,THREAD_PRIORITY_NORMAL,0,CREATE_SUSPENDED);
-	m_thread->m_bAutoDelete = FALSE;
-	m_thread->ResumeThread();
-
+	m_handler = handler;
+	m_thread = std::jthread([this](std::stop_token stop) { JoinerThread(stop); });
 	m_reader->Run(this);
 }
 
 void CAVIJoiner::Stop()
 {
-	m_stopping = TRUE;
-	if (m_thread) {
-		m_ev.SetEvent();
-		WaitForSingleObject(m_thread->m_hThread, INFINITE);
-		delete m_thread;
-		m_thread = NULL;
+	m_stopping = true;
+	if (m_thread.joinable()) {
+		m_thread.request_stop();
+		m_thread.join();
 	}
-	delete m_reader;
-	m_reader = NULL;
-	m_stopping = FALSE;
-	m_joinHandler = NULL;
+	m_reader.reset();
+	m_stopping = false;
+	m_handler = nullptr;
 }
 
-void CAVIJoiner::HandleFrame(REFERENCE_TIME duration, BYTE *data, int len)
+void CAVIJoiner::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame)
 {
-	if (m_stopping) 
+	if (m_stopping)
 		return;
-
-	if (data) {
-		m_joinHandler->HandleFrame(duration, data, len);
-	}
-	else {
-		m_ev.SetEvent();
-	}
+	if (CFrameHandler* handler = m_handler.load())
+		handler->HandleFrame(duration, frame);
 }
 
-void CAVIJoiner::JoinerThread()
+void CAVIJoiner::EndOfStream()
 {
-	for(;;) {
-		CSingleLock lck(&m_ev);
-		lck.Lock();
+	{
+		std::lock_guard lock(m_mutex);
+		m_readerEndedFlag = true;
+	}
+	m_readerEnded.notify_one();
+}
 
-		if (m_stopping) return;
+void CAVIJoiner::JoinerThread(std::stop_token stop)
+{
+	ComApartment com;
+	try {
+		for (;;) {
+			{
+				std::unique_lock lock(m_mutex);
+				if (!m_readerEnded.wait(lock, stop, [this] { return m_readerEndedFlag; }))
+					return; // stop requested
+				m_readerEndedFlag = false;
+			}
 
-		if (m_current < m_filenames.GetSize()) {
-			delete m_reader;
-			m_reader = new CAVIReader(m_filenames[m_current]);
-			m_current++;
+			// The finished reader is destroyed here rather than on its own
+			// streaming thread, which would deadlock stopping its graph.
+			m_reader.reset();
+			if (m_next >= m_filenames.size()) {
+				if (CFrameHandler* handler = m_handler.load())
+					handler->EndOfStream();
+				return;
+			}
+			m_reader = std::make_unique<CAVIReader>(m_filenames[m_next++]);
 			m_reader->Run(this);
 		}
-		else {
-			m_joinHandler->HandleFrame(-1, NULL, 0);
-			return;
-		}
+	} catch (const DShowError& e) {
+		if (CFrameHandler* handler = m_handler.load())
+			handler->SourceError(e.Message());
 	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// CDVControl
 
-CDVControl::CDVControl()
-: m_ET(NULL)
+void CDVControl::CtrlAttach(IUnknown* device)
 {
-}
-
-CDVControl::~CDVControl()
-{
-	if (m_ET) m_ET->Release();
-}
-
-void CDVControl::CtrlAttach(IUnknown *pDev)
-{
-	HRESULT hr;
-	if (m_ET) m_ET->Release();
-	m_ET = NULL;
-	hr = pDev->QueryInterface(IID_IAMExtTransport, (void**)&m_ET);
+	m_ET.Release();
+	device->QueryInterface(IID_PPV_ARGS(&m_ET)); // optional: not every device has transport control
 }
 
 void CDVControl::CtrlStop()
 {
-	if (m_ET) {
+	if (m_ET)
 		m_ET->put_Mode(ED_MODE_STOP);
-	}
 }
 
 void CDVControl::CtrlPlay()
 {
-	if (m_ET) {
+	if (m_ET)
 		m_ET->put_Mode(ED_MODE_PLAY);
-	}
 }
 
 void CDVControl::CtrlPause()
@@ -660,51 +626,33 @@ void CDVControl::CtrlPause()
 
 void CDVControl::CtrlRecord()
 {
-	if (m_ET) {
+	if (m_ET)
 		m_ET->put_Mode(ED_MODE_RECORD);
-	}
 }
 
 void CDVControl::CtrlRecPause()
 {
-	if (m_ET) {
+	if (m_ET)
 		m_ET->put_Mode(ED_MODE_RECORD_FREEZE);
-	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// CDVInput
 
-CDVInput::CDVInput(LPCSTR vsrc)
-: m_DF(NULL)
+CDVInput::CDVInput(const CString& device)
 {
-	HRESULT hr;
-	IBaseFilter *pVSRC;
-	CArray<CString,CString&> list;
-	EnumVideoDevices(FALSE, vsrc, list, &pVSRC);
-	CtrlAttach(pVSRC);
-	hr = m_FG->AddFilter(pVSRC, L"DVin");
-	CHECK_HR(hr);
+	CComPtr<IBaseFilter> source = FindVideoDevice(device);
+	CtrlAttach(source);
+	CheckHR(m_FG->AddFilter(source, L"DVin"), L"Can't add the DV device to the graph");
+	CheckHR(m_GB->RenderStream(nullptr, &MEDIATYPE_Interleaved, source, nullptr, m_inputFilterRef),
+	        L"Can't connect to the DV device (is another program using it?)");
 
-	hr = m_GB->RenderStream(NULL, &MEDIATYPE_Interleaved, pVSRC, NULL, m_inputFilter);
-	pVSRC->Release();
-	CHECK_HR(hr);
-
-
-	IPin *pPin;
-	hr = m_inputFilter->m_input->ConnectedTo(&pPin);
-	CHECK_HR(hr, "Can't find DV output pin");
-	hr = pPin->QueryInterface(IID_IAMDroppedFrames, (void**)&m_DF);
-	pPin->Release();
-	CHECK_HR(hr, "Can't find IAMDroppedFrames");
-
+	CComPtr<IPin> devicePin;
+	CheckHR(InputPin()->ConnectedTo(&devicePin), L"Can't find the DV output pin");
+	CheckHR(devicePin.QueryInterface(&m_DF), L"Can't find IAMDroppedFrames");
 #ifdef DEBUG
 	DumpGraph(m_FG, 0);
 #endif
-}
-
-CDVInput::~CDVInput()
-{
-	if (m_DF) m_DF->Release();
 }
 
 long CDVInput::GetDroppedFrames()
@@ -715,583 +663,532 @@ long CDVInput::GetDroppedFrames()
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// CDVOutput
 
-CDVOutput::CDVOutput(LPCSTR vdst, CMediaType *type)
-: COutputGraph(type, 10)
+CDVOutput::CDVOutput(const CString& device, const CMediaType& type) : COutputGraph(type, 10)
 {
-	HRESULT hr;
-	IBaseFilter *pVDST;
-	CArray<CString,CString&> list;
-	EnumVideoDevices(TRUE, vdst, list, &pVDST);
-	CtrlAttach(pVDST);
-	hr = m_FG->AddFilter(pVDST, L"DVout");
-	CHECK_HR(hr);
-	hr = m_GB->RenderStream(NULL, NULL, (IBaseFilter*)m_outputFilter, NULL, pVDST);
-	pVDST->Release();
-	CHECK_HR(hr);
+	CComPtr<IBaseFilter> sink = FindVideoDevice(device);
+	CtrlAttach(sink);
+	CheckHR(m_FG->AddFilter(sink, L"DVout"), L"Can't add the DV device to the graph");
+	CheckHR(m_GB->RenderStream(nullptr, nullptr, m_outputFilterRef, nullptr, sink),
+	        L"Can't connect to the DV device (is another program using it?)");
 #ifdef DEBUG
 	DumpGraph(m_FG, 0);
 #endif
-	hr = m_MC->Run();
-	if (hr != S_OK) {
-		OAFilterState state;
-		hr = m_MC->GetState(1000, &state);
-		CHECK_HR(hr, "Can't start DV output");
+	if (m_MC->Run() != S_OK) {
+		OAFilterState state = State_Stopped;
+		CheckHR(m_MC->GetState(1000, &state), L"Can't start DV output");
 		if (state != State_Running)
-			ThrowDShowException(CDShowException::error, "DV output not running");
+			throw DShowError(L"DV output not running");
 	}
 }
 
 CDVOutput::~CDVOutput()
 {
-	m_outputFilter->m_output->DeliverEndOfStream();
-	if (m_ME) {
-		long evCode;
-		m_ME->WaitForCompletion(5000, &evCode);
-	}
+	DeliverEndOfStream();
+	WaitForCompletion();
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// CAVIWriter
 
-CAVIWriter::CAVIWriter(LPCSTR filename, LPCSTR dtformat, int ndigits, time_t tim, bool type2AVI, CMediaType *type)
-: COutputGraph(type), m_filename(filename), m_dtformat(dtformat), m_ndigits(ndigits), m_dvtime(tim)
+CAVIWriter::CAVIWriter(const CString& base, const CString& dtformat, int ndigits, std::time_t dvTime, bool type2AVI,
+                       const CMediaType& type)
+    : COutputGraph(type), m_dvTime(dvTime), m_base(base), m_dtformat(dtformat), m_ndigits(ndigits)
 {
-	HRESULT hr;
-	IBaseFilter * pMux; IFileSinkFilter *pFile;
-	WCHAR wbuf[256];
-	CString tmp = "~";
-	m_tmpfile = GetCaptureFilename(m_filename, tmp+m_dtformat, m_ndigits, m_dvtime);
-	MultiByteToWideChar(CP_ACP, 0, m_tmpfile, -1, wbuf, sizeof wbuf/ sizeof (WCHAR));
-	m_GB->SetOutputFileName(&MEDIASUBTYPE_Avi, wbuf, &pMux, &pFile);
-	IFileSinkFilter2 *pFile2;
-	hr = pFile->QueryInterface(IID_IFileSinkFilter2, (void**)&pFile2);
-	pFile->Release();
-	pFile2->SetMode(AM_FILE_OVERWRITE);
-	pFile2->Release();
+	m_tmpfile = NextCaptureFilename(m_base, L"~" + m_dtformat, m_ndigits, m_dvTime);
+
+	CComPtr<IBaseFilter> mux;
+	CComPtr<IFileSinkFilter> sink;
+	CheckHR(m_GB->SetOutputFileName(&MEDIASUBTYPE_Avi, m_tmpfile, &mux, &sink), L"Can't create " + m_tmpfile);
+	if (CComQIPtr<IFileSinkFilter2> sink2 = sink)
+		sink2->SetMode(AM_FILE_OVERWRITE);
+
 	if (type2AVI) {
-		IBaseFilter *pDVSplit;
-		hr = CoCreateInstance((REFCLSID)CLSID_DVSplitter,
-							  NULL, CLSCTX_INPROC, (REFIID)IID_IBaseFilter,
-							  (void **)&pDVSplit);
-		CHECK_HR(hr);
-		hr = m_FG->AddFilter(pDVSplit, L"DV splitter");
-		CHECK_HR(hr);
-		hr = m_GB->RenderStream(NULL, &MEDIATYPE_Interleaved, (IBaseFilter*)m_outputFilter, NULL, pDVSplit);
-		CHECK_HR(hr);
-		hr = m_GB->RenderStream(NULL, &MEDIATYPE_Video, pDVSplit, NULL, pMux);
-		CHECK_HR(hr);
-		hr = m_GB->RenderStream(NULL, &MEDIATYPE_Audio, pDVSplit, NULL, pMux);
-		CHECK_HR(hr);
-		pDVSplit->Release();
+		CComPtr<IBaseFilter> splitter;
+		CheckHR(splitter.CoCreateInstance(CLSID_DVSplitter), L"Can't create the DV splitter");
+		CheckHR(m_FG->AddFilter(splitter, L"DV splitter"), L"Can't add the DV splitter");
+		CheckHR(m_GB->RenderStream(nullptr, &MEDIATYPE_Interleaved, m_outputFilterRef, nullptr, splitter),
+		        L"Can't connect the DV splitter");
+		CheckHR(m_GB->RenderStream(nullptr, &MEDIATYPE_Video, splitter, nullptr, mux),
+		        L"Can't connect the video stream to the AVI writer");
+		CheckHR(m_GB->RenderStream(nullptr, &MEDIATYPE_Audio, splitter, nullptr, mux),
+		        L"Can't connect the audio stream to the AVI writer");
+	} else {
+		CheckHR(m_GB->RenderStream(nullptr, &MEDIATYPE_Interleaved, m_outputFilterRef, nullptr, mux),
+		        L"Can't connect the AVI writer");
 	}
-	else {
-		hr = m_GB->RenderStream(NULL, &MEDIATYPE_Interleaved, (IBaseFilter*)m_outputFilter, NULL, pMux);
-		CHECK_HR(hr);
-	}
-	pMux->Release();
 #ifdef DEBUG
 	DumpGraph(m_FG, 0);
 #endif
-	m_MC->Run();
+	CheckSucceeded(m_MC->Run(), L"Can't start writing " + m_tmpfile);
 }
 
 CAVIWriter::~CAVIWriter()
 {
-	m_outputFilter->m_output->DeliverEndOfStream();
-	if (m_ME) {
-		long evCode;
-		m_ME->WaitForCompletion(5000, &evCode);
+	if (m_finished)
+		return;
+	try {
+		Finish();
+	} catch (const DShowError& e) {
+		TRACE(L"%s\n", e.Message().GetString());
 	}
-	if (m_MC) m_MC->Stop();
-	CString tmp = GetCaptureFilename(m_filename, m_dtformat, m_ndigits, m_dvtime);
-	MoveFile(m_tmpfile, tmp);
+}
+
+void CAVIWriter::Finish()
+{
+	if (m_finished)
+		return;
+	m_finished = true;
+
+	DeliverEndOfStream();
+	WaitForCompletion();
+	m_MC->Stop();
+
+	const CString filename = NextCaptureFilename(m_base, m_dtformat, m_ndigits, m_dvTime);
+	if (!MoveFileEx(m_tmpfile, filename, 0))
+		throw DShowError(L"Can't rename " + m_tmpfile + L" to " + filename, HRESULT_FROM_WIN32(GetLastError()));
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// CMonitor
 
-UINT MonitoringThread(LPVOID ptr)
+CMonitor::CMonitor(HWND hWnd, const CMediaType& type) : COutputGraph(type), m_hWnd(hWnd)
 {
-	((CMonitor*)ptr)->MonitoringThread();
-	return 0;
-}
-
-CMonitor::CMonitor(HWND hWnd, CMediaType *type)
-: COutputGraph(type), m_hWnd(hWnd), m_VW(NULL), m_sample(NULL)
-{
-	HRESULT hr;
-	hr = m_FG->QueryInterface(IID_IVideoWindow, (void **)&m_VW);
-	CHECK_HR(hr);
-	hr = m_GB->RenderStream(NULL, NULL, (IBaseFilter*)m_outputFilter, NULL, NULL);
-	SetDVDecoding(m_FG, 0);
-	hr = m_VW->put_Owner((LONG)m_hWnd);
-	hr = m_VW->put_WindowStyle(WS_CHILD);
+	CheckHR(m_FG.QueryInterface(&m_VW), L"Can't get IVideoWindow");
+	CheckSucceeded(m_GB->RenderStream(nullptr, nullptr, m_outputFilterRef, nullptr, nullptr),
+	               L"Can't build the preview (is a DV decoder installed?)");
+	SetDVDecoding(m_FG, false);
+	m_VW->put_Owner(reinterpret_cast<OAHWND>(m_hWnd));
+	m_VW->put_WindowStyle(WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
 	Resize();
-	m_MC->Run();
+	CheckSucceeded(m_MC->Run(), L"Can't start the preview");
 
-	m_thread = AfxBeginThread(::MonitoringThread,this,THREAD_PRIORITY_BELOW_NORMAL,0,CREATE_SUSPENDED);
-	m_thread->m_bAutoDelete = FALSE;
-	m_thread->ResumeThread();
+	m_thread = std::jthread([this](std::stop_token stop) { MonitoringThread(stop); });
 }
 
 CMonitor::~CMonitor()
 {
-	if (m_VW) m_VW->Release();
-	m_VW = NULL;
-	m_ev.SetEvent();
+	m_thread.request_stop();
+	// Stopping the graph decommits the allocator, which releases the thread if
+	// it is blocked in GetDeliveryBuffer.
+	m_MC->Stop();
+	if (m_thread.joinable())
+		m_thread.join();
 
-	WaitForSingleObject(m_thread->m_hThread, INFINITE);
-	delete m_thread;
+	m_VW->put_Visible(OAFALSE);
+	m_VW->put_Owner(0);
 }
 
-void CMonitor::Resize() {
-	ULONG cx, cy, w, h;
-	RECT rect;
-	GetClientRect(m_hWnd, &rect);
-	cx = rect.right - rect.left;
-	cy = rect.bottom - rect.top;
-
-	w = cy*4/3;//*m_width/m_height;
-	h = cx*3/4;//*m_height/m_width;
-	if (cx < w) w = cx;
-	if (cy < h) h = cy;
-	m_VW->SetWindowPosition((cx-w)/2, (cy-h)/2, w, h);
-}
-
-void CMonitor::HandleFrame(REFERENCE_TIME duration, BYTE *data, int len)
+void CMonitor::Resize()
 {
-	if (data) {
-		if (m_sample) {
-			BYTE *ptr;
-			m_sample->GetPointer(&ptr);
-			CopyMemory(ptr, data, len);
-			m_sample->SetActualDataLength(len);
-			m_sample->SetSyncPoint(true);
-			m_sample = NULL;
-			m_ev.SetEvent();
-		}
+	RECT rect{};
+	::GetClientRect(m_hWnd, &rect);
+	const long cx = rect.right - rect.left;
+	const long cy = rect.bottom - rect.top;
+
+	// Largest 4:3 rectangle, centred.
+	const long w = (std::min)(cx, cy * 4 / 3);
+	const long h = (std::min)(cy, cx * 3 / 4);
+	m_VW->SetWindowPosition((cx - w) / 2, (cy - h) / 2, w, h);
+}
+
+void CMonitor::HandleFrame(REFERENCE_TIME /*duration*/, std::span<const BYTE> frame)
+{
+	{
+		std::lock_guard lock(m_mutex);
+		if (!m_sample || m_sampleFilled || frame.size() > static_cast<std::size_t>(m_sample->GetSize()))
+			return;
+		BYTE* data = nullptr;
+		if (FAILED(m_sample->GetPointer(&data)))
+			return;
+		std::copy(frame.begin(), frame.end(), data);
+		m_sample->SetActualDataLength(static_cast<long>(frame.size()));
+		m_sample->SetSyncPoint(TRUE);
+		m_sampleFilled = true;
 	}
+	m_filled.notify_one();
 }
 
-void CMonitor::MonitoringThread()
+void CMonitor::MonitoringThread(std::stop_token stop)
 {
-	DWORD ticks = 0;
-	for(;;) {
-		IMediaSample *pSample = NULL;
-		HRESULT hr;
-		hr = m_outputFilter->m_output->GetDeliveryBuffer(&pSample, NULL, NULL, 0);
-		if (hr == NOERROR) {
-			ticks = GetTickCount() - ticks;
-			Sleep(ticks < 200 ? ticks + 10 : 200);
-			m_sample = pSample;
-			CSingleLock lck(&m_ev);
-			lck.Lock();
-			if (!m_VW) {
-				pSample->Release();
+	ComApartment com;
+	std::mutex sleepMutex;
+	std::condition_variable_any sleeper;
+	const auto sleepFor = [&](ULONGLONG ms) {
+		std::unique_lock lock(sleepMutex);
+		sleeper.wait_for(lock, stop, std::chrono::milliseconds(ms), [] { return false; });
+	};
+
+	ULONGLONG lastDelivery = GetTickCount64();
+	while (!stop.stop_requested()) {
+		CComPtr<IMediaSample> sample;
+		if (GetDeliveryBuffer(&sample) != S_OK) {
+			sleepFor(100);
+			continue;
+		}
+
+		// Preview at most as often as the previous frame took to go through, so
+		// a slow renderer drops frames instead of holding up capture.
+		const ULONGLONG elapsed = GetTickCount64() - lastDelivery;
+		sleepFor(elapsed < 200 ? elapsed + 10 : 200);
+
+		{
+			std::unique_lock lock(m_mutex);
+			m_sample = sample;
+			m_sampleFilled = false;
+			const bool filled = m_filled.wait(lock, stop, [this] { return m_sampleFilled; });
+			m_sample.Release();
+			if (!filled)
 				return;
-			}
-			ticks = GetTickCount();
-			m_outputFilter->m_output->Deliver(pSample);
-			pSample->Release();
-			pSample = NULL;
 		}
-		else {
-			Sleep(100);
-		}
+		lastDelivery = GetTickCount64();
+		Deliver(sample);
 	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////
+// CDV
 
-CDVQueue::CDVQueue(int queueSize, int dataSize)
-: m_buffers(NULL), m_queue(NULL), m_dataSize(dataSize), m_queueSize(queueSize+1),
-  m_head(0), m_tail(0), m_load(0), m_end(false)
-{
-	m_buffers = new BYTE[(sizeof (Buffer) + m_dataSize) * m_queueSize];
-	m_queue = new Buffer *[m_queueSize];
-	for(int i=0; i<m_queueSize; i++) {
-		m_queue[i] = (Buffer *) (m_buffers + (sizeof (Buffer) + m_dataSize) * i);
-	}
-}
+BEGIN_MESSAGE_MAP(CDV, CStatic)
+	ON_WM_SIZE()
+END_MESSAGE_MAP()
 
-CDVQueue::~CDVQueue()
-{
-	delete m_buffers;
-	delete[] m_queue;
-}
-
-void CDVQueue::Put(REFERENCE_TIME duration, BYTE *data, int len)
-{
-	if (!data) {
-		m_end = true;
-		m_evGet.SetEvent();
-		m_evPut.SetEvent();
-		return;
-	}
-	while(!m_end) {
-		{
-			CAutoLock lock(&m_cs);
-			if (m_load < m_queueSize-1) {
-				m_queue[m_tail]->duration = duration;
-				m_queue[m_tail]->len = len;
-				CopyMemory(m_queue[m_tail]->data, data, len);
-				m_tail = (m_tail+1) % m_queueSize;
-				m_load++;
-				m_evGet.SetEvent();
-				break;
-			}
-		}
-		CSingleLock lck(&m_evPut);
-		lck.Lock();
-	}
-}
-
-
-bool CDVQueue::Get(REFERENCE_TIME *duration, BYTE **data, int *len)
-{
-	for(;;) {
-		{
-			CAutoLock lock(&m_cs);
-			if (m_load > 0) {
-				*duration = m_queue[m_head]->duration;
-				*len = m_queue[m_head]->len;
-				*data = m_queue[m_head]->data;
-				m_head = (m_head+1) % m_queueSize;
-				m_load--;
-				m_evPut.SetEvent();
-				break;
-			}
-		}
-		if (m_end) return false;
-		CSingleLock lck(&m_evGet);
-		lck.Lock();
-	}
-	return true;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-static UINT RecordingThread(LPVOID pdv)
-{
-	((CDV *)pdv)->RecordingThread();
-	return 0;
-}
-static UINT CapturingThread(LPVOID pdv)
-{
-	((CDV *)pdv)->CapturingThread();
-	return 0;
-}
-
-CDV::CDV()
-: m_aviJoiner(NULL), m_aviWriter(NULL), m_dvInput(NULL), m_dvOutput(NULL), m_monitor(NULL), m_queue(NULL),
-  m_thread(NULL),
-  m_type2AVI(true), m_discontinuityTreshold(1), m_maxAVIFrames(25*60*15), m_everyNth(1), m_recordPreview(TRUE),
-  m_dropped(0), m_counter(-1), m_time(-1), m_captureTime(0), m_ndigits(0), m_DVctrl(FALSE)
-{
-}
+CDV::CDV() = default;
 
 CDV::~CDV()
 {
 	Destroy();
 }
 
-void CDV::OnSize(UINT nType, int cx, int cy) 
+void CDV::OnSize(UINT nType, int cx, int cy)
 {
 	CStatic::OnSize(nType, cx, cy);
-
-	if (m_monitor) m_monitor->Resize();	
+	if (m_monitor)
+		m_monitor->Resize();
 }
 
-int CDV::GetState()
+std::size_t CDV::GetQueueLoad() const
 {
-	return m_state;
+	return m_queue ? m_queue->Load() : 0;
 }
 
-int CDV::GetDropped()
+CString CDV::TakeError()
 {
-	return m_dropped;
+	std::lock_guard lock(m_mutex);
+	CString error = m_error;
+	m_error.Empty();
+	return error;
 }
 
-long CDV::GetCounter()
+void CDV::ReportError(const CString& message)
 {
-	return m_counter;
+	{
+		std::lock_guard lock(m_mutex);
+		if (!m_error.IsEmpty())
+			return; // keep the first error; later ones are usually consequences
+		m_error = message;
+	}
+	if (m_notifyWnd)
+		::PostMessage(m_notifyWnd, WM_DV_ERROR, 0, 0);
 }
 
-REFERENCE_TIME CDV::GetTime()
+void CDV::NotifyTimeChange(std::time_t dvTime)
 {
-	return m_time;
-}
-
-int CDV::GetQueueLoad()
-{
-	return m_queue->m_load;
-}
-
-
-CString CDV::GetCaptureFilename()
-{
-	CAutoLock lock(&m_cs);
-	
-	return m_captureFilename;
+	m_dvTime = dvTime;
+	if (m_notifyWnd)
+		::PostMessage(m_notifyWnd, WM_DV_TIMECHANGE, 0, 0);
 }
 
 void CDV::Destroy()
 {
 	m_state = Idle;
 
-	if (m_queue) {m_queue->Put(-1, NULL, 0);}
-
-	if (m_aviJoiner) m_aviJoiner->Stop();
-	if (m_dvInput) m_dvInput->Stop();
-
-	if (m_thread) {
-		WaitForSingleObject(m_thread->m_hThread, INFINITE);
-		delete m_thread;
-		m_thread = NULL;
+	// Wake everything that might be blocked on the queue or a source, then join.
+	if (m_queue)
+		m_queue->Close();
+	if (m_aviJoiner)
+		m_aviJoiner->Stop();
+	if (m_dvInput)
+		m_dvInput->Stop();
+	if (m_thread.joinable()) {
+		m_thread.request_stop();
+		m_thread.join();
 	}
 
-	if (m_aviJoiner) { delete(m_aviJoiner);	m_aviJoiner = NULL; }
-	if (m_dvInput) { 
-		if (m_DVctrl) m_dvInput->CtrlStop();
-		delete(m_dvInput);	m_dvInput = NULL; 
+	m_aviJoiner.reset();
+	if (m_dvInput) {
+		if (m_DVctrl)
+			m_dvInput->CtrlStop();
+		m_dvInput.reset();
 	}
-	if (m_aviWriter) { delete(m_aviWriter);	m_aviWriter = NULL; }
-	if (m_dvOutput) { 
-		if (m_DVctrl) m_dvOutput->CtrlStop();
-		delete(m_dvOutput); m_dvOutput = NULL; 
+	m_aviWriter.reset();
+	if (m_dvOutput) {
+		if (m_DVctrl)
+			m_dvOutput->CtrlStop();
+		m_dvOutput.reset();
 	}
-	if (m_monitor) { delete(m_monitor);	m_monitor = NULL; }
-	if (m_queue) { delete(m_queue);	m_queue = NULL; }
+	m_monitor.reset();
+	m_queue.reset();
+
 	m_dropped = 0;
 	m_counter = -1;
 	m_time = -1;
 	m_captureTime = 0;
 }
 
-
-void CDV::HandleFrame(REFERENCE_TIME duration, BYTE *data, int len)
+void CDV::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame)
 {
-	m_queue->Put(duration, data, len);
+	try {
+		m_queue->Put(duration, frame);
+	} catch (const std::length_error&) {
+		ReportError(L"Received a DV frame larger than expected");
+		m_queue->Close();
+	}
 }
 
+void CDV::EndOfStream()
+{
+	m_queue->Close();
+}
 
-void CDV::BuildCapturing(LPCSTR vsrc)
+void CDV::SourceError(const CString& message)
+{
+	ReportError(message);
+	m_queue->Close();
+}
+
+void CDV::StartWorker(void (CDV::*worker)(std::stop_token))
+{
+	m_thread = std::jthread([this, worker](std::stop_token stop) { (this->*worker)(stop); });
+}
+
+void CDV::BuildCapturing(const CString& device)
 {
 	Destroy();
-	HRESULT hr = S_OK;
+	TakeError();
+	m_notifyWnd = ::GetParent(m_hWnd);
 
-	m_dvInput = new CDVInput(vsrc);
+	m_dvInput = std::make_unique<CDVInput>(device);
 
 	CMediaType type;
 	m_dvInput->GetMediaType(&type);
 
-	m_monitor = new CMonitor(m_hWnd, &type);
-
-	m_queue = new CDVQueue(100, type.GetSampleSize());
-
-	m_dvInput->Run(this);
+	m_monitor = std::make_unique<CMonitor>(m_hWnd, type);
+	m_queue = std::make_unique<windv::FrameQueue>(kQueueFrames, type.GetSampleSize());
 
 	m_state = CapturePaused;
+	m_dvInput->Run(this);
+	StartWorker(&CDV::CapturingThread);
 
-	m_thread = AfxBeginThread(::CapturingThread,this,THREAD_PRIORITY_NORMAL,0,CREATE_SUSPENDED);
-	m_thread->m_bAutoDelete = FALSE;
-	m_thread->ResumeThread();
-
-	InvalidateRect(NULL);
+	InvalidateRect(nullptr);
 	UpdateWindow();
 }
 
 void CDV::StopCapturing()
 {
-	if (m_state == Capturing) {
-		m_state = CapturePaused;
-		if (m_DVctrl) m_dvInput->CtrlPause();
-	}
+	State expected = Capturing;
+	if (m_state.compare_exchange_strong(expected, CapturePaused) && m_DVctrl)
+		m_dvInput->CtrlPause();
 }
 
-void CDV::StartCapturing(LPCSTR filename, LPCSTR dtformat, int ndigits, REFERENCE_TIME captureTime)
+void CDV::StartCapturing(const CString& filename, const CString& dtformat, int ndigits, REFERENCE_TIME captureTime)
 {
-	if (m_state == CapturePaused) {
-		m_captureTime = captureTime;
-		m_captureFilename = filename;
-		m_dtformat = dtformat;
-		m_ndigits = ndigits;
-		m_state = Capturing;
-		if (m_DVctrl) m_dvInput->CtrlPlay();
+	if (m_state != CapturePaused)
+		return;
+	{
+		std::lock_guard lock(m_mutex);
+		m_target = {filename, dtformat, ndigits};
 	}
+	m_captureTime = captureTime;
+	m_state = Capturing;
+	if (m_DVctrl)
+		m_dvInput->CtrlPlay();
 }
 
-
-void CDV::BuildRecording(LPCSTR filenames, LPCSTR vdst)
+void CDV::BuildRecording(const CString& filenames, const CString& device)
 {
 	Destroy();
+	TakeError();
+	m_notifyWnd = ::GetParent(m_hWnd);
 
-	m_aviJoiner = new CAVIJoiner(filenames);
+	m_aviJoiner = std::make_unique<CAVIJoiner>(filenames);
 
 	CMediaType type;
 	m_aviJoiner->GetMediaType(&type);
 
-	m_monitor = new CMonitor(m_hWnd, &type);
-	m_dvOutput = new CDVOutput(vdst, &type);
-
-	m_queue = new CDVQueue(100, type.GetSampleSize());
-
-	m_aviJoiner->Run(this);
+	m_monitor = std::make_unique<CMonitor>(m_hWnd, type);
+	m_dvOutput = std::make_unique<CDVOutput>(device, type);
+	m_queue = std::make_unique<windv::FrameQueue>(kQueueFrames, type.GetSampleSize());
 
 	m_state = RecordPaused;
+	m_aviJoiner->Run(this);
+	if (m_DVctrl)
+		m_dvOutput->CtrlRecPause();
+	StartWorker(&CDV::RecordingThread);
 
-	if (m_DVctrl) m_dvOutput->CtrlRecPause();
-
-	m_thread = AfxBeginThread(::RecordingThread,this,THREAD_PRIORITY_NORMAL,0,CREATE_SUSPENDED);
-	m_thread->m_bAutoDelete = FALSE;
-	m_thread->ResumeThread();
-
-	InvalidateRect(NULL);
+	InvalidateRect(nullptr);
 	UpdateWindow();
 }
 
 void CDV::StopRecording()
 {
-	if (m_state == Recording) {
-		m_state = RecordPaused;
-		if (m_DVctrl) m_dvOutput->CtrlRecPause();
-	}
+	State expected = Recording;
+	if (m_state.compare_exchange_strong(expected, RecordPaused) && m_DVctrl)
+		m_dvOutput->CtrlRecPause();
 }
 
 void CDV::StartRecording()
 {
-	if (m_state == RecordPaused) {
-		m_state = Recording;
-		if (m_DVctrl) m_dvOutput->CtrlRecord();
-	}
+	State expected = RecordPaused;
+	if (m_state.compare_exchange_strong(expected, Recording) && m_DVctrl)
+		m_dvOutput->CtrlRecord();
 }
 
-void CDV::CapturingThread()
+void CDV::CapturingThread(std::stop_token /*stop*/)
 {
-	BYTE *buffer;
-	REFERENCE_TIME duration;
-	int len;
+	ComApartment com;
+	try {
+		CaptureLoop();
+		FinishWriter();
+	} catch (const DShowError& e) {
+		ReportError(e.Message());
+	} catch (const std::exception& e) {
+		ReportError(CString(e.what()));
+	}
+	m_aviWriter.reset();
+	NotifyTimeChange(0);
+}
+
+void CDV::FinishWriter()
+{
+	if (auto writer = std::move(m_aviWriter))
+		writer->Finish();
+}
+
+void CDV::CaptureLoop()
+{
 	CMediaType type;
 	m_dvInput->GetMediaType(&type);
-	long nFrames, counter;
+
+	long nFrames = 0;
+	long counter = 0;
 	long dropped = m_dvInput->GetDroppedFrames();
-	int dvTime = 0, oldDVTime = 0;
+	std::time_t dvTime = 0, lastValidDVTime = 0;
 	m_counter = 0;
 	m_time = 0;
-	while (m_state) {
-		if (m_queue->Get(&duration, &buffer, &len)) {
-			long newDVTime = GetDVRecordingTime(buffer, len);
-			int deltaDVTime = 0;
-			if (dvTime != newDVTime) {
-				if (newDVTime > 0) {
-					if (oldDVTime > 0) {
-						deltaDVTime = newDVTime - oldDVTime;
-						if (deltaDVTime < 0) deltaDVTime = -deltaDVTime;
-					}
-					oldDVTime = newDVTime;
-				}
-				dvTime = newDVTime;
-				GetParent()->PostMessage(WM_DV_TIMECHANGE, 0, dvTime);
-			}
-			if (m_queue->m_load < m_queue->m_queueSize/2) 
-				m_monitor->HandleFrame(duration, buffer, len);
 
-			if (m_state == Capturing) {
-				if (m_aviWriter && (nFrames >= m_maxAVIFrames || ((m_discontinuityTreshold > 0) && (deltaDVTime > m_discontinuityTreshold)))) {
-					delete m_aviWriter;
-					m_aviWriter = NULL;
-				}
-				if (!m_aviWriter) {
-					m_aviWriter = new CAVIWriter(m_captureFilename, m_dtformat, m_ndigits, dvTime, m_type2AVI, &type);
-					nFrames = 0;
-					counter = 0;
-				}
-				if ((counter % m_everyNth) == 0) {
-					m_aviWriter->HandleFrame(duration, buffer, len);
-					nFrames++;
-				}
-				if (dvTime && !m_aviWriter->m_dvtime) {
-					m_aviWriter->m_dvtime = dvTime;
-				}
-				counter++;
-				m_counter++;
-				m_time += duration;
-				if (m_captureTime && (m_time >= m_captureTime)) {
-					m_captureTime = 0;
-					m_state = Finished;
-				}
-				m_dropped = m_dvInput->GetDroppedFrames() - dropped;
+	while (m_state != Idle) {
+		const auto frame = m_queue->Get();
+		if (!frame)
+			break;
+
+		// Track the camcorder's recording timestamp; a jump means a new scene.
+		const std::time_t newDVTime = windv::GetDVRecordingTime(frame->data).value_or(0);
+		std::time_t deltaDVTime = 0;
+		if (newDVTime != dvTime) {
+			if (newDVTime > 0) {
+				if (lastValidDVTime > 0)
+					deltaDVTime = newDVTime > lastValidDVTime ? newDVTime - lastValidDVTime : lastValidDVTime - newDVTime;
+				lastValidDVTime = newDVTime;
 			}
-			else {
-				if (m_aviWriter) {
-					delete m_aviWriter;
-					m_aviWriter = NULL;
+			dvTime = newDVTime;
+			NotifyTimeChange(dvTime);
+		}
+
+		// Only preview while the queue is draining comfortably.
+		if (m_queue->Load() < m_queue->Capacity() / 2)
+			m_monitor->HandleFrame(frame->duration, frame->data);
+
+		if (m_state == Capturing) {
+			const int threshold = m_discontinuityThreshold;
+			if (m_aviWriter && (nFrames >= m_maxAVIFrames || (threshold > 0 && deltaDVTime > threshold)))
+				FinishWriter();
+			if (!m_aviWriter) {
+				CaptureTarget target;
+				{
+					std::lock_guard lock(m_mutex);
+					target = m_target;
 				}
-				dropped = m_dvInput->GetDroppedFrames();
-				if (m_state != Finished) {
-					m_dropped = 0;
-					m_counter = 0;
-					m_time = 0;
-				}
+				m_aviWriter = std::make_unique<CAVIWriter>(target.filename, target.dtformat, target.ndigits, dvTime,
+				                                           m_type2AVI, type);
+				nFrames = 0;
+				counter = 0;
+			}
+			if (counter % (std::max)(m_everyNth.load(), 1) == 0) {
+				m_aviWriter->HandleFrame(frame->duration, frame->data);
+				++nFrames;
+			}
+			if (dvTime > 0 && m_aviWriter->m_dvTime <= 0)
+				m_aviWriter->m_dvTime = dvTime;
+			++counter;
+			++m_counter;
+			m_time += frame->duration;
+
+			const REFERENCE_TIME captureTime = m_captureTime;
+			if (captureTime && m_time >= captureTime) {
+				m_captureTime = 0;
+				State expected = Capturing;
+				m_state.compare_exchange_strong(expected, Finished);
+			}
+			m_dropped = m_dvInput->GetDroppedFrames() - dropped;
+		} else {
+			FinishWriter();
+			dropped = m_dvInput->GetDroppedFrames();
+			if (m_state != Finished) {
+				m_dropped = 0;
+				m_counter = 0;
+				m_time = 0;
 			}
 		}
 	}
-	if (m_aviWriter) {
-		delete m_aviWriter;
-		m_aviWriter = NULL;
-	}
-	GetParent()->PostMessage(WM_DV_TIMECHANGE, 0, 0);
 }
 
-void CDV::RecordingThread()
+void CDV::RecordingThread(std::stop_token /*stop*/)
 {
-	BYTE *buffer;
-	REFERENCE_TIME duration;
-	int len;
-	long dvTime = 0;
-	GetParent()->PostMessage(WM_DV_TIMECHANGE, 0, 0);
-	if (m_queue->Get(&duration, &buffer, &len)) {
-		m_counter = 0;
-		m_time  = 0;
-		while (m_state) {
-			long newDVTime = GetDVRecordingTime(buffer, len);
-			if (dvTime != newDVTime) {
-				dvTime = newDVTime;
-				GetParent()->PostMessage(WM_DV_TIMECHANGE, 0, dvTime);
-			}
-			if (m_recordPreview) {
-				if (m_queue->m_end || m_queue->m_load > m_queue->m_queueSize/2) 
-					m_monitor->HandleFrame(duration, buffer, len);
-			}
+	ComApartment com;
+	NotifyTimeChange(0);
+	try {
+		RecordLoop();
+	} catch (const DShowError& e) {
+		ReportError(e.Message());
+	} catch (const std::exception& e) {
+		ReportError(CString(e.what()));
+	}
+	NotifyTimeChange(0);
+}
 
-			m_dvOutput->HandleFrame(duration, buffer, len);
-			if (m_state == Recording) {
-				m_counter++;
-				m_time += duration;
-				if (!m_queue->Get(&duration, &buffer, &len)) {
-					if (m_state) m_state = Finished;
-				}
+void CDV::RecordLoop()
+{
+	auto frame = m_queue->Get();
+	if (!frame)
+		return;
+
+	m_counter = 0;
+	m_time = 0;
+	std::time_t dvTime = 0;
+	// While paused or finished the current frame is sent again and again, which
+	// keeps a still picture on the DV output. The output queue paces the loop.
+	while (m_state != Idle) {
+		const std::time_t newDVTime = windv::GetDVRecordingTime(frame->data).value_or(0);
+		if (newDVTime != dvTime) {
+			dvTime = newDVTime;
+			NotifyTimeChange(dvTime);
+		}
+		if (m_recordPreview && (m_queue->IsClosed() || m_queue->Load() > m_queue->Capacity() / 2))
+			m_monitor->HandleFrame(frame->duration, frame->data);
+
+		m_dvOutput->HandleFrame(frame->duration, frame->data);
+
+		if (m_state == Recording) {
+			++m_counter;
+			m_time += frame->duration;
+			if (auto next = m_queue->Get()) {
+				frame = next;
+			} else {
+				State expected = Recording;
+				m_state.compare_exchange_strong(expected, Finished);
 			}
 		}
 	}
-	GetParent()->PostMessage(WM_DV_TIMECHANGE, 0, 0);
 }
-
-BEGIN_MESSAGE_MAP(CDV, CStatic)
-	//{{AFX_MSG_MAP(CDV)
-	ON_WM_SIZE()
-	//}}AFX_MSG_MAP
-END_MESSAGE_MAP()
-
-/////////////////////////////////////////////////////////////////////////////
-
-CString FormatTime(LPCSTR format, time_t tim)
-{
-	CString tmp = format;
-	char buf[1024];
-
-	strftime(buf, sizeof buf, tmp + '\0', localtime(&tim));
-
-	return CString(buf);
-}
-
