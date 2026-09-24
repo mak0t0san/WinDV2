@@ -4,10 +4,11 @@
 #include "EngineThread.h"
 
 #include "ComApartment.h"
+#include "DShowError.h"
 
 namespace {
 
-constexpr auto kTickInterval = std::chrono::milliseconds(200);
+constexpr ULONGLONG kTickIntervalMs = 200;
 
 // Waits for event, dispatching messages sent to this thread from other threads
 // (but not posted ones, so no UI code runs re-entrantly).
@@ -22,19 +23,32 @@ void WaitPumpingSentMessages(HANDLE event)
 	}
 }
 
+void DispatchPendingMessages()
+{
+	MSG msg;
+	while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+		TranslateMessage(&msg);
+		DispatchMessageW(&msg);
+	}
+}
+
 } // namespace
 
-EngineThread::EngineThread(std::function<void()> tick) : m_tick(std::move(tick))
+EngineThread::EngineThread(std::function<void()> tick)
+    : m_tick(std::move(tick)), m_wake(CreateEventW(nullptr, FALSE, FALSE, nullptr))
 {
+	if (!m_wake)
+		throw DShowError(L"Can't create the engine thread's event", HRESULT_FROM_WIN32(GetLastError()));
 	m_thread = std::jthread([this](std::stop_token stop) { Run(stop); });
 }
 
 EngineThread::~EngineThread()
 {
 	m_thread.request_stop();
-	m_wake.notify_all();
+	SetEvent(m_wake);
 	if (m_thread.joinable())
 		m_thread.join();
+	CloseHandle(m_wake);
 }
 
 void EngineThread::Post(std::function<void()> task)
@@ -43,7 +57,7 @@ void EngineThread::Post(std::function<void()> task)
 		std::lock_guard lock(m_mutex);
 		m_tasks.push_back(std::move(task));
 	}
-	m_wake.notify_all();
+	SetEvent(m_wake);
 }
 
 void EngineThread::Invoke(const std::function<void()>& task)
@@ -70,24 +84,42 @@ void EngineThread::Invoke(const std::function<void()>& task)
 	CloseHandle(done);
 }
 
+std::function<void()> EngineThread::TakeTask()
+{
+	std::lock_guard lock(m_mutex);
+	if (m_tasks.empty())
+		return {};
+	std::function<void()> task = std::move(m_tasks.front());
+	m_tasks.pop_front();
+	return task;
+}
+
 void EngineThread::Run(std::stop_token stop)
 {
 	ComApartment com;
+	// Make this a GUI thread with a message queue before any window exists on it.
+	MSG msg;
+	PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+
+	ULONGLONG nextTick = GetTickCount64();
 	for (;;) {
-		std::function<void()> task;
-		{
-			std::unique_lock lock(m_mutex);
-			m_wake.wait_for(lock, stop, kTickInterval, [this] { return !m_tasks.empty(); });
-			if (!m_tasks.empty()) {
-				task = std::move(m_tasks.front());
-				m_tasks.pop_front();
-			} else if (stop.stop_requested()) {
-				return; // all queued work is done
-			}
-		}
-		if (task)
+		// Everything queued, then windows' messages, then periodic work.
+		while (std::function<void()> task = TakeTask()) {
 			task();
-		if (m_tick)
-			m_tick();
+			DispatchPendingMessages();
+		}
+		if (stop.stop_requested())
+			return; // all queued work is done
+
+		DispatchPendingMessages();
+		const ULONGLONG now = GetTickCount64();
+		if (now >= nextTick) {
+			if (m_tick)
+				m_tick();
+			nextTick = now + kTickIntervalMs;
+		}
+
+		const DWORD timeout = static_cast<DWORD>(nextTick > now ? nextTick - now : 0);
+		MsgWaitForMultipleObjectsEx(1, &m_wake, timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 	}
 }

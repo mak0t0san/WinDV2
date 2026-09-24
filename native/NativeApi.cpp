@@ -94,6 +94,7 @@ struct windv_engine final : private DVEngineEvents {
 			status->counter = m_engine->GetCounter();
 			status->time = m_engine->GetTime();
 			status->dvTime = m_engine->GetDVTime();
+			status->framesReceived = m_engine->GetFramesReceived();
 		}
 	}
 
@@ -148,10 +149,15 @@ windv_engine::windv_engine(HWND parent, windv_event_callback callback, void* con
 		RegisterClassExW(&wc);
 	});
 
-	m_preview = CreateWindowExW(0, kPreviewClass, L"", WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, 0, 0, 0, 0, parent,
-	                            nullptr, instance, nullptr);
+	// Layered, so the compositor gives it (and the renderer's window inside it)
+	// a surface of its own. WinUI's top-level window is created without a GDI
+	// redirection surface, so an ordinary child window would never show the
+	// renderer's GDI/DirectDraw output. Needs Windows 8+ (layered child windows).
+	m_preview = CreateWindowExW(WS_EX_LAYERED, kPreviewClass, L"", WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, 0, 0,
+	                            0, 0, parent, nullptr, instance, nullptr);
 	if (!m_preview)
 		throw DShowError(L"Can't create the preview window", HRESULT_FROM_WIN32(GetLastError()));
+	SetLayeredWindowAttributes(m_preview, 0, 255, LWA_ALPHA); // fully opaque
 	SetWindowLongPtrW(m_preview, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
 	m_status.counter = -1;

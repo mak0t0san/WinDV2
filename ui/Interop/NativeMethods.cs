@@ -75,7 +75,7 @@ internal struct NativeStatus
     public int Counter;
     public int QueueLoad;
     public int QueueCapacity;
-    public int Reserved;
+    public int FramesReceived;
     public long Time;
     public long DVTime;
 }

@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-WinDV 1.2.3: DV capture/record over FireWire. Originally Visual C++ 6 MFC + DirectShow,
+WinDV 2 (by Makoto, <https://github.com/mak0t0san/WinDV2>; based on Petr Mourek's WinDV
+1.2.3): DV capture/record over FireWire. Originally Visual C++ 6 MFC + DirectShow,
 now a C++20 DirectShow engine with two front ends: a C# WinUI 3 app (`ui/`, the new UI)
 and the original MFC dialog (`app/`, kept until the new app is hardware-tested). Win32
 and x64, Visual Studio 2026. See [README.md](README.md) for the full picture; this file
@@ -30,6 +31,17 @@ own. `app/` and `native/` add `engine/` and `core/` to their include paths.
 
 The solution's `Win32` platform maps to `x86` for the C# project, and the csproj maps
 back to `Win32` (`NativePlatform`) to build and copy the right `WinDV.Native.dll`.
+CI (`.github/workflows/build.yml`) builds both platforms on `windows-2025-vs2026`, runs
+the tests and uploads zipped apps. Pushing a `vX.Y.Z` tag publishes a GitHub release,
+using `.github/release-notes/vX.Y.Z.md` as the notes if that file exists. The version
+lives in `ui/WinDV.csproj` (`<Version>`) and `app/WinDV.rc` (VERSIONINFO). A tag build
+overrides it with the tag's version.
+
+The C# project references only the WinUI components of the Windows App SDK (pinned to
+the versions of the 2.5.1 meta-package), not `Microsoft.WindowsAppSDK` itself. That
+keeps the AI/ML runtimes (about 70 MB) out of the self-contained output. When
+upgrading, copy the component versions from the new meta-package's nuspec.
+
 `RuntimeIdentifiers` lists both RIDs so that one restore covers both platforms.
 Without that, a no-restore x86 build fails with NETSDK1047.
 
@@ -154,7 +166,10 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
   events (`CDV`) call `Destroy()` in their own destructor, so workers are joined while
   the event sink is still intact.
 - WinUI's UI thread is an STA, so **WinDV.Native runs the engine on its own MTA thread**
-  (`EngineThread`). Every API call is forwarded there and waited on. A UI-thread caller
+  (`EngineThread`). **That thread must run a message loop.** DirectShow creates the
+  renderer's windows on the thread that builds the graph, and they are children of the UI
+  window, so the two threads' input is attached. Without the loop the whole UI hung as
+  soon as a preview existed. Every API call is forwarded there and waited on. A UI-thread caller
   waits with `MsgWaitForMultipleObjectsEx(QS_SENDMESSAGE)`. The video renderer's window
   is a child of a UI-thread window, and it `SendMessage`s to it (for example in
   `put_Owner`), so a plain wait would deadlock. `windv_get_status` and
@@ -164,6 +179,12 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
   `DispatcherQueue.TryEnqueue`.
 - **Preview airspace:** the preview is a native child HWND (`WinDVPreview`), positioned
   by `MainWindow.UpdatePreview()` over the `PreviewHost` border in physical pixels.
+  It **must stay `WS_EX_LAYERED`**. WinUI's top-level window has no GDI redirection
+  surface, so the legacy video renderer's output inside a plain child window is never
+  shown (frames arrive, and the picture stays black).
+- Camcorders report trick-play modes (`PLAY_FAST_FWD_1..6`, `PLAY_FAST_REV_1..6`, `_X`,
+  `REVERSE_FREEZE`) rather than the `PLAY_FASTEST_*` they were sent. `ToDeckMode` in
+  `DVDevice.cpp` maps each family.
   Nothing in XAML can draw over it, so hide it (`_modalCount`, settings view) before
   showing any dialog, flyout or overlay in that area.
 - Only user-initiated closes raise `AppWindow.Closing`, not `Window.Close()`. Every close

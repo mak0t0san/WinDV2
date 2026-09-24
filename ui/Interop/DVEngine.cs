@@ -18,6 +18,7 @@ public readonly record struct EngineStatus(
     int Counter,
     int QueueLoad,
     int QueueCapacity,
+    int FramesReceived,
     long Time,
     long DVTime);
 
@@ -168,10 +169,10 @@ public sealed unsafe class DVEngine : IDisposable
     public EngineStatus GetStatus()
     {
         if (_handle == 0)
-            return new EngineStatus(EngineState.Idle, DeckMode.Unknown, false, 0, -1, 0, 0, -1, 0);
+            return new EngineStatus(EngineState.Idle, DeckMode.Unknown, false, 0, -1, 0, 0, 0, -1, 0);
         NativeMethods.GetStatus(_handle, out var s);
         return new EngineStatus((EngineState)s.State, (DeckMode)s.DeckMode, s.CanControlDeck != 0, s.Dropped,
-            s.Counter, s.QueueLoad, s.QueueCapacity, s.Time, s.DVTime);
+            s.Counter, s.QueueLoad, s.QueueCapacity, s.FramesReceived, s.Time, s.DVTime);
     }
 
     public void SetOptions(EngineOptions options)

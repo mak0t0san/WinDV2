@@ -41,7 +41,7 @@ public sealed partial class MainViewModel : ObservableObject
         CaptureFile = settings.CaptureFile;
         RecordFiles = settings.RecordFile;
         Timecode = FormatTimecode(-1);
-        RecordedAt = StatusText = DeckText = DroppedText = ErrorMessage = "";
+        RecordedAt = StatusText = DeckText = DroppedText = ErrorMessage = SignalText = "";
 
         _timer = dispatcher.CreateTimer();
         _timer.Interval = PollInterval;
@@ -78,7 +78,10 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial bool IsRecordingToTape { get; set; }
     [ObservableProperty] public partial bool IsPlaying { get; set; }
     [ObservableProperty] public partial bool IsPaused { get; set; }
-    [ObservableProperty] public partial bool IsWinding { get; set; }
+    /// <summary>Winding or cueing forward: lights up Fast-forward.</summary>
+    [ObservableProperty] public partial bool IsGoingForward { get; set; }
+    /// <summary>Winding or cueing backward: lights up Rewind.</summary>
+    [ObservableProperty] public partial bool IsGoingBackward { get; set; }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PlayCommand), nameof(PauseCommand), nameof(StopCommand),
@@ -100,6 +103,10 @@ public sealed partial class MainViewModel : ObservableObject
     public partial bool HasPicture { get; set; }
 
     public bool ShowsPlaceholder => !HasPicture;
+
+    /// <summary>"Signal" / "No signal": whether DV frames are arriving from the source.</summary>
+    [ObservableProperty] public partial string SignalText { get; set; }
+    [ObservableProperty] public partial bool HasSignal { get; set; }
 
     [ObservableProperty] public partial string ErrorMessage { get; set; }
     [ObservableProperty] public partial bool HasError { get; set; }
@@ -449,14 +456,15 @@ public sealed partial class MainViewModel : ObservableObject
         var s = _status;
 
         HasPicture = s.State != EngineState.Idle;
+        UpdateSignal(s);
         IsLive = s.State is EngineState.CapturePaused or EngineState.Capturing or EngineState.Finished;
         IsCapturing = s.State == EngineState.Capturing;
         IsRecordingToTape = s.State == EngineState.Recording;
         CanControlDeck = s.CanControlDeck;
         IsPlaying = s.DeckMode == DeckMode.Playing || s.State == EngineState.Recording;
         IsPaused = s.DeckMode == DeckMode.Paused || s.State == EngineState.RecordPaused;
-        IsWinding = s.DeckMode is DeckMode.FastForward or DeckMode.Rewind or DeckMode.CueForward
-            or DeckMode.CueReverse;
+        IsGoingForward = s.DeckMode is DeckMode.FastForward or DeckMode.CueForward;
+        IsGoingBackward = s.DeckMode is DeckMode.Rewind or DeckMode.CueReverse;
 
         Timecode = FormatTimecode(s.State == EngineState.Idle ? -1 : s.Time);
         RecordedAt = s.DVTime > 0
@@ -474,6 +482,25 @@ public sealed partial class MainViewModel : ObservableObject
             _exitOnFinish = false;
             CloseRequested?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private int _lastFrames;
+    private long _lastFrameTick;
+
+    // A signal is present while the frame count keeps moving; allow a second
+    // of silence before saying otherwise, so a status poll between frames
+    // doesn't flicker.
+    private void UpdateSignal(EngineStatus s)
+    {
+        long now = Environment.TickCount64;
+        if (s.FramesReceived != _lastFrames)
+        {
+            _lastFrames = s.FramesReceived;
+            _lastFrameTick = now;
+        }
+        bool live = s.State != EngineState.Idle;
+        HasSignal = live && s.FramesReceived > 0 && now - _lastFrameTick < 1000;
+        SignalText = !live ? "" : HasSignal ? "Signal" : "No signal";
     }
 
     private string StateText(EngineState state) => state switch

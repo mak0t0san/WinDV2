@@ -8,6 +8,11 @@
 
 // Runs tasks one at a time on its own thread in the multithreaded apartment, and
 // calls tick() between them (at least every 200 ms) for periodic work.
+//
+// The thread runs a message loop while it waits. DirectShow creates the video
+// renderer's window on the thread that builds the graph, and that window is a
+// child of the UI's window: if this thread didn't dispatch messages, every
+// click or move in the UI would wait on it forever.
 class EngineThread {
 public:
 	explicit EngineThread(std::function<void()> tick);
@@ -29,10 +34,11 @@ public:
 
 private:
 	void Run(std::stop_token stop);
+	std::function<void()> TakeTask();
 
 	std::function<void()> m_tick;
 	std::mutex m_mutex;
-	std::condition_variable_any m_wake;
 	std::deque<std::function<void()>> m_tasks;
+	HANDLE m_wake; // auto-reset: tasks queued or stop requested
 	std::jthread m_thread;
 };

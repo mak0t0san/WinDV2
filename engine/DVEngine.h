@@ -60,7 +60,12 @@ public:
 	long GetCounter() const { return m_counter; }
 	REFERENCE_TIME GetTime() const { return m_time; }
 	std::time_t GetDVTime() const { return m_dvTime; }
-	// Returns and clears the last error reported by a worker thread.
+	// Frames delivered by the source since the pipeline was built; shows whether
+	// a signal is arriving at all.
+	long GetFramesReceived() const
+	{
+		return m_framesReceived;
+	} // Returns and clears the last error reported by a worker thread.
 	std::wstring TakeError();
 
 	void Destroy();
@@ -121,4 +126,5 @@ private:
 	std::atomic<REFERENCE_TIME> m_time{-1};
 	std::atomic<REFERENCE_TIME> m_captureTime{0};
 	std::atomic<std::time_t> m_dvTime{0};
+	std::atomic<long> m_framesReceived{0};
 };

@@ -1,4 +1,6 @@
-# WinDV 1.2.3
+# WinDV 2
+
+[![Build](https://github.com/mak0t0san/WinDV2/actions/workflows/build.yml/badge.svg)](https://github.com/mak0t0san/WinDV2/actions/workflows/build.yml)
 
 A small Windows tool for moving DV video between a camcorder and disk over FireWire
 (IEEE 1394):
@@ -8,12 +10,24 @@ A small Windows tool for moving DV video between a camcorder and disk over FireW
 - **Record**: push AVI files back out to DV tape, optionally concatenating several
   files into one continuous recording.
 
-Original program by Petr Mourek (2002–2003), <http://windv.mourek.cz>.
+WinDV 2 is by Makoto, <https://github.com/mak0t0san/WinDV2>.
+**[Download the latest release](https://github.com/mak0t0san/WinDV2/releases/latest)**:
+unzip it and run `WinDV.exe`. Nothing needs installing.
 
-This repository is that 1.2.3 source, modernized: it builds with Visual Studio 2026 as
-a Unicode C++20 application for both x86 and x64, and a number of long-standing bugs
-are fixed (see [Changes from the original](#changes-from-the-original)). File naming
-and registry settings are unchanged.
+## Thanks
+
+WinDV was written by **Petr Mourek** (2002–2003, <http://windv.mourek.cz>), and for two
+decades it has been the tool people reach for to get their DV tapes onto a computer.
+He published its source so that others could build on it, and WinDV 2 is built on it:
+his DV capture engine is still at the heart of this version. Thank you, Petr.
+
+## What's new in 2.0
+
+WinDV 2 starts from the 1.2.3 source and modernizes it. It builds with Visual Studio
+2026 as a Unicode C++20 application for both x86 and x64, and a number of long-standing
+bugs are fixed (see [Changes from the original](#changes-from-the-original)). File
+naming and registry settings are unchanged, so an existing WinDV configuration carries
+over.
 
 There are two front ends over the same DirectShow engine:
 
@@ -256,6 +270,6 @@ Only a project file was added; no source file was modified.
 The vendored base classes under `external/baseclasses/` are MIT licensed by Microsoft.
 doctest under `external/doctest/` is MIT licensed by Viktor Kirilov.
 
-WinDV itself was distributed by Petr Mourek as freeware with source available; the
-original release stated no formal license text. Check with the original author before
-redistributing.
+The original WinDV was distributed by Petr Mourek as freeware with its source. His
+site says of the code: "You can use the code without any restrictions. It would be nice
+if you mention the origin." This project does so, gratefully (see [Thanks](#thanks)).

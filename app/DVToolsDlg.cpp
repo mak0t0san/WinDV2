@@ -28,8 +28,9 @@ public:
 	CAboutDlg() : CDialog(IDD_ABOUTBOX) {}
 
 protected:
-	afx_msg void OnEmail() { OpenInShell(L"mailto:petr@mourek.cz?subject=WinDV"); }
-	afx_msg void OnUrl() { OpenInShell(L"http://windv.mourek.cz/"); }
+	// IDC_EMAIL is the credit line to the original WinDV; the ID predates it.
+	afx_msg void OnOriginalSite() { OpenInShell(L"http://windv.mourek.cz/"); }
+	afx_msg void OnProjectSite() { OpenInShell(L"https://github.com/mak0t0san/WinDV2"); }
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message);
 	DECLARE_MESSAGE_MAP()
@@ -49,8 +50,8 @@ private:
 };
 
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialog)
-	ON_COMMAND(IDC_EMAIL, OnEmail)
-	ON_COMMAND(IDC_URL, OnUrl)
+	ON_COMMAND(IDC_EMAIL, OnOriginalSite)
+	ON_COMMAND(IDC_URL, OnProjectSite)
 	ON_WM_CTLCOLOR()
 	ON_WM_SETCURSOR()
 END_MESSAGE_MAP()

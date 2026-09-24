@@ -95,9 +95,9 @@ typedef struct windv_status {
 	int32_t counter;        /* frames captured / recorded; -1 when idle */
 	int32_t queueLoad;      /* frames waiting between source and sink */
 	int32_t queueCapacity;
-	int32_t reserved;
-	int64_t time;   /* position in 100 ns units; -1 when idle */
-	int64_t dvTime; /* camcorder recording time (time_t, local); 0 if unknown */
+	int32_t framesReceived; /* frames from the source since the pipeline was built */
+	int64_t time;           /* position in 100 ns units; -1 when idle */
+	int64_t dvTime;         /* camcorder recording time (time_t, local); 0 if unknown */
 } windv_status;
 
 typedef struct windv_options {

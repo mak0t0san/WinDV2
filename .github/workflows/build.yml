@@ -1,0 +1,101 @@
+# Builds WinDV for x64 and x86, runs the unit tests, and packages the WinUI app.
+# Pushing a tag like v2.0.0 also publishes a GitHub release with both zips.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    # Windows Server 2025 with Visual Studio 2026: the v145 toolset, MFC for it,
+    # the 26100 SDK and .NET 10.
+    runs-on: windows-2025-vs2026
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: x64 # solution platform
+            dotnet: x64   # C# project platform
+          - arch: x86
+            platform: Win32
+            dotnet: x86
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: microsoft/setup-msbuild@v3
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          # v2.0.0 -> 2.0.0 on tags; otherwise the project's version as is.
+          $version = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}'.TrimStart('v') } else { '' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $props = @('/p:Configuration=Release', '/p:Platform=${{ matrix.platform }}')
+          if ('${{ steps.version.outputs.version }}') { $props += '/p:Version=${{ steps.version.outputs.version }}' }
+          msbuild WinDV.sln /restore /m /nologo /v:m @props
+
+      - name: Test
+        shell: pwsh
+        run: '& "${{ matrix.platform }}\Release\WinDV.Tests.exe"'
+
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          if (-not $version) { $version = (Select-Xml -Path ui\WinDV.csproj -XPath '//Version').Node.InnerText + "-${{ github.sha }}".Substring(0, 12) }
+          $name = "WinDV-$version-${{ matrix.arch }}"
+          $out = "ui\bin\${{ matrix.dotnet }}\Release\net10.0-windows10.0.26100.0\win-${{ matrix.dotnet }}"
+          New-Item -ItemType Directory -Force "dist\$name" | Out-Null
+          Copy-Item "$out\*" "dist\$name" -Recurse
+          Get-ChildItem "dist\$name" -Recurse -Filter *.pdb | Remove-Item
+          Copy-Item README.md "dist\$name\README.md"
+          Compress-Archive -Path "dist\$name" -DestinationPath "dist\$name.zip"
+          "name=$name" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: dist/${{ steps.package.outputs.name }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$notes" ]; then notes_args=(--notes-file "$notes"); else notes_args=(--generate-notes); fi
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --title "WinDV ${GITHUB_REF_NAME#v}" "${notes_args[@]}"

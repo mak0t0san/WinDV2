@@ -96,10 +96,12 @@ void DVEngine::Destroy()
 	m_counter = -1;
 	m_time = -1;
 	m_captureTime = 0;
+	m_framesReceived = 0;
 }
 
 void DVEngine::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame)
 {
+	++m_framesReceived;
 	try {
 		m_queue->Put(duration, frame);
 	} catch (const std::length_error&) {

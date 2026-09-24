@@ -7,10 +7,75 @@
 
 namespace {
 
-// Shuttle modes from the SDK's xprtdefs.h. <streams.h> pulls in the older
-// edevdefs.h instead, which lacks them and clashes with xprtdefs.h.
+// Shuttle and trick-play modes from the SDK's xprtdefs.h. <streams.h> pulls in
+// the older edevdefs.h instead, which lacks them and clashes with xprtdefs.h.
 constexpr long kModePlayFastestFwd = ED_BASE + 933L;
 constexpr long kModePlayFastestRev = ED_BASE + 935L;
+
+// What the deck reports while cueing is not what it was asked for: a camcorder
+// told PLAY_FASTEST_FWD answers e.g. PLAY_FAST_FWD_6. Each range is a family.
+constexpr long kModePlaySlowestFwd = ED_BASE + 934L;
+constexpr long kModePlaySlowestRev = ED_BASE + 936L;
+constexpr long kModeRewFastest = ED_BASE + 938L;
+constexpr long kModeRevPlay = ED_BASE + 939L; // x1 reverse play
+constexpr long kModePlaySlowFwdFirst = ED_BASE + 1001L, kModePlaySlowFwdLast = ED_BASE + 1006L;
+constexpr long kModePlayFastFwdFirst = ED_BASE + 1007L, kModePlayFastFwdLast = ED_BASE + 1012L;
+constexpr long kModePlaySlowRevFirst = ED_BASE + 1013L, kModePlaySlowRevLast = ED_BASE + 1018L;
+constexpr long kModePlayFastRevFirst = ED_BASE + 1019L, kModePlayFastRevLast = ED_BASE + 1024L;
+constexpr long kModeReverseFreeze = ED_BASE + 1025L;
+constexpr long kModePlaySlowFwdX = ED_BASE + 1026L;
+constexpr long kModePlayFastFwdX = ED_BASE + 1027L;
+constexpr long kModePlaySlowRevX = ED_BASE + 1028L;
+constexpr long kModePlayFastRevX = ED_BASE + 1029L;
+
+constexpr bool InRange(long mode, long first, long last)
+{
+	return mode >= first && mode <= last;
+}
+
+windv::DeckMode ToDeckMode(long mode)
+{
+	using windv::DeckMode;
+	switch (mode) {
+	case ED_MODE_STOP:
+		return DeckMode::Stopped;
+	case ED_MODE_PLAY:
+	case kModePlaySlowestFwd:
+	case kModePlaySlowFwdX:
+		return DeckMode::Playing; // slow motion still plays forward with a picture
+	case ED_MODE_FREEZE:
+	case kModeReverseFreeze:
+		return DeckMode::Paused;
+	case ED_MODE_FF:
+		return DeckMode::FastForward;
+	case ED_MODE_REW:
+	case kModeRewFastest:
+		return DeckMode::Rewind;
+	case kModePlayFastestFwd:
+	case kModePlayFastFwdX:
+		return DeckMode::CueForward;
+	case kModePlayFastestRev:
+	case kModePlaySlowestRev:
+	case kModePlayFastRevX:
+	case kModePlaySlowRevX:
+	case kModeRevPlay:
+		return DeckMode::CueReverse;
+	case ED_MODE_RECORD:
+		return DeckMode::Recording;
+	case ED_MODE_RECORD_FREEZE:
+		return DeckMode::RecordPaused;
+	default:
+		break;
+	}
+	if (InRange(mode, kModePlaySlowFwdFirst, kModePlaySlowFwdLast))
+		return DeckMode::Playing;
+	if (InRange(mode, kModePlayFastFwdFirst, kModePlayFastFwdLast))
+		return DeckMode::CueForward;
+	if (InRange(mode, kModePlaySlowRevFirst, kModePlaySlowRevLast) ||
+	    InRange(mode, kModePlayFastRevFirst, kModePlayFastRevLast))
+		return DeckMode::CueReverse;
+	return DeckMode::Unknown;
+}
 
 // Calls visit(friendlyName, moniker, bindContext) for every video capture
 // device; visit returns false to stop.
@@ -84,28 +149,7 @@ windv::DeckMode DVTransport::Mode()
 	long mode = 0;
 	if (!m_ET || FAILED(m_ET->get_Mode(&mode)))
 		return DeckMode::Unknown;
-	switch (mode) {
-	case ED_MODE_STOP:
-		return DeckMode::Stopped;
-	case ED_MODE_PLAY:
-		return DeckMode::Playing;
-	case ED_MODE_FREEZE:
-		return DeckMode::Paused;
-	case ED_MODE_FF:
-		return DeckMode::FastForward;
-	case ED_MODE_REW:
-		return DeckMode::Rewind;
-	case kModePlayFastestFwd:
-		return DeckMode::CueForward;
-	case kModePlayFastestRev:
-		return DeckMode::CueReverse;
-	case ED_MODE_RECORD:
-		return DeckMode::Recording;
-	case ED_MODE_RECORD_FREEZE:
-		return DeckMode::RecordPaused;
-	default:
-		return DeckMode::Unknown;
-	}
+	return ToDeckMode(mode);
 }
 
 void DVTransport::Command(windv::DeckCommand command)
