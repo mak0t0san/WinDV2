@@ -9,7 +9,7 @@
       WinDV-<version>-<arch>-portable.zip
           WinDV-<version>-<arch>\WinDV.exe    launcher (launcher\), starts app\WinDV.exe
           WinDV-<version>-<arch>\README.md
-          WinDV-<version>-<arch>\app\...      the WinUI app and its runtime
+          WinDV-<version>-<arch>\app\...      the WinUI app, its runtime and LICENSE.txt
       WinDV-<version>-<arch>-Setup.exe        Inno Setup installer (installer\WinDV.iss)
 
     The installer needs Inno Setup 6 (winget install JRSoftware.InnoSetup).
@@ -61,6 +61,8 @@ New-Item -ItemType Directory -Force "$stage\app" | Out-Null
     "/p:Platform=$Arch" "/p:Version=$Version" "/p:PublishDir=$stage\app\"
 if ($LASTEXITCODE -ne 0) { throw "Publishing the app failed with exit code $LASTEXITCODE." }
 Get-ChildItem "$stage\app" -Recurse -Filter *.pdb | Remove-Item
+# MIT: the license travels with every copy (zip and installer both ship app\).
+Copy-Item "$root\LICENSE" "$stage\app\LICENSE.txt"
 
 # Portable zip: only the launcher and README at the top level.
 Copy-Item $launcher "$stage\WinDV.exe"

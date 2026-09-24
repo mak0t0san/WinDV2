@@ -337,6 +337,8 @@ Only a project file was added; no source file was modified.
 
 ## License
 
+WinDV 2 is released under the [MIT License](LICENSE).
+
 The vendored base classes under `external/baseclasses/` are MIT licensed by Microsoft.
 doctest under `external/doctest/` is MIT licensed by Viktor Kirilov.
 
