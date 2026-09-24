@@ -40,7 +40,20 @@ std::optional<FrameQueue::Frame> FrameQueue::Get()
 	m_notEmpty.wait(lock, [this] { return m_closed.load() || m_load.load() > 0; });
 	if (m_load.load() == 0)
 		return std::nullopt;
+	return TakeLocked(lock);
+}
 
+std::optional<FrameQueue::Frame> FrameQueue::GetFor(std::chrono::milliseconds timeout)
+{
+	std::unique_lock lock(m_mutex);
+	m_notEmpty.wait_for(lock, timeout, [this] { return m_closed.load() || m_load.load() > 0; });
+	if (m_load.load() == 0)
+		return std::nullopt;
+	return TakeLocked(lock);
+}
+
+FrameQueue::Frame FrameQueue::TakeLocked(std::unique_lock<std::mutex>& lock)
+{
 	const Slot& slot = m_slots[m_head];
 	Frame frame{slot.duration, {SlotData(m_head), slot.length}};
 	m_head = (m_head + 1) % m_slotCount;

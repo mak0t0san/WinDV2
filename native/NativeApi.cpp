@@ -95,6 +95,7 @@ struct windv_engine final : private DVEngineEvents {
 			status->time = m_engine->GetTime();
 			status->dvTime = m_engine->GetDVTime();
 			status->framesReceived = m_engine->GetFramesReceived();
+			status->stopReason = static_cast<std::int32_t>(m_engine->GetStopReason());
 		}
 	}
 
@@ -276,6 +277,7 @@ WINDV_API void WINDV_CALL windv_set_options(windv_handle engine, const windv_opt
 	e.m_everyNth = (std::max)(1, options->everyNth);
 	e.m_recordPreview = options->recordPreview != 0;
 	e.m_DVctrl = options->deckFollowsPipeline != 0;
+	e.m_signalLossSeconds = (std::max)(0, options->signalLossSeconds);
 }
 
 WINDV_API void WINDV_CALL windv_get_status(windv_handle engine, windv_status* status)

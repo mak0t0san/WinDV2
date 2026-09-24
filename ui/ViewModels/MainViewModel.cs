@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml.Controls;
 using WinDV.Interop;
 using WinDV.Services;
 
@@ -41,7 +42,9 @@ public sealed partial class MainViewModel : ObservableObject
         CaptureFile = settings.CaptureFile;
         RecordFiles = settings.RecordFile;
         Timecode = FormatTimecode(-1);
-        RecordedAt = StatusText = DeckText = DroppedText = ErrorMessage = SignalText = "";
+        RecordedAt = StatusText = DeckText = DroppedText = ErrorMessage = SignalText = DiskText = "";
+        ErrorTitle = "Something went wrong";
+        ErrorSeverity = InfoBarSeverity.Error;
 
         _timer = dispatcher.CreateTimer();
         _timer.Interval = PollInterval;
@@ -108,6 +111,12 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial string SignalText { get; set; }
     [ObservableProperty] public partial bool HasSignal { get; set; }
 
+    /// <summary>Free space where captures go, e.g. "412 GB free, about 31 h of DV".</summary>
+    [ObservableProperty] public partial string DiskText { get; set; }
+    [ObservableProperty] public partial bool IsDiskLow { get; set; }
+
+    [ObservableProperty] public partial string ErrorTitle { get; set; }
+    [ObservableProperty] public partial InfoBarSeverity ErrorSeverity { get; set; }
     [ObservableProperty] public partial string ErrorMessage { get; set; }
     [ObservableProperty] public partial bool HasError { get; set; }
 
@@ -238,6 +247,8 @@ public sealed partial class MainViewModel : ObservableObject
         if (!_suppressToolChange && _engine is not null)
             _ = RunAsync(InitPipelineAsync, resetOnError: false);
     }
+
+    partial void OnCaptureFileChanged(string value) => _lastDiskCheck = null;
 
     partial void OnCaptureDeviceChanged(string oldValue, string newValue)
     {
@@ -392,7 +403,8 @@ public sealed partial class MainViewModel : ObservableObject
             _settings.MaxAVIFrames,
             _settings.EveryNth,
             _settings.RecordPreview,
-            DeckFollowsPipeline: IsRecordTool && _settings.DeckControl));
+            DeckFollowsPipeline: IsRecordTool && _settings.DeckControl,
+            _settings.SignalLossSeconds));
     }
 
     /// <summary>
@@ -439,11 +451,33 @@ public sealed partial class MainViewModel : ObservableObject
         ShowError(message);
     }
 
-    private void ShowError(string message)
+    private void ShowError(string message) =>
+        ShowMessage("Something went wrong", message, InfoBarSeverity.Error);
+
+    private void ShowMessage(string title, string message, InfoBarSeverity severity)
     {
+        ErrorTitle = title;
         ErrorMessage = message;
+        ErrorSeverity = severity;
         HasError = true;
         UpdateStatus();
+    }
+
+    // A capture or recording just ended by itself: say why, once.
+    private void AnnounceStop(StopReason reason)
+    {
+        switch (reason)
+        {
+            case StopReason.SignalLost:
+                ShowMessage("Capture finished", $"No video arrived for {_settings.SignalLossSeconds} seconds " +
+                    "(end of the tape?), so the capture was stopped and the file saved.", InfoBarSeverity.Informational);
+                break;
+            case StopReason.DiskFull:
+                ShowMessage("Capture stopped: the disk is almost full",
+                    "The capture was stopped and the file saved before the disk filled up. Free up some space, " +
+                    "or choose another drive, then press REC to continue.", InfoBarSeverity.Warning);
+                break;
+        }
     }
 
     // ------------------------------------------------------------------ Status
@@ -475,7 +509,14 @@ public sealed partial class MainViewModel : ObservableObject
         IsQueueVisible = s.State is EngineState.Capturing or EngineState.Recording or EngineState.RecordPaused;
         QueueFill = s.QueueCapacity > 0 ? 100.0 * s.QueueLoad / s.QueueCapacity : 0;
         if (!IsBusy || s.State != EngineState.Idle)
-            StatusText = StateText(s.State);
+            StatusText = StateText(s.State, s.StopReason);
+        UpdateDiskSpace();
+
+        // Update _lastState first: AnnounceStop -> ShowMessage calls back in here.
+        bool justFinished = s.State == EngineState.Finished && _lastState != EngineState.Finished;
+        _lastState = s.State;
+        if (justFinished)
+            AnnounceStop(s.StopReason);
 
         if (s.State == EngineState.Finished && _exitOnFinish)
         {
@@ -503,15 +544,87 @@ public sealed partial class MainViewModel : ObservableObject
         SignalText = !live ? "" : HasSignal ? "Signal" : "No signal";
     }
 
-    private string StateText(EngineState state) => state switch
+    private string StateText(EngineState state, StopReason reason) => state switch
     {
         EngineState.CapturePaused => "Live. Press REC to capture.",
         EngineState.Capturing => "Capturing to disk",
         EngineState.RecordPaused => "Ready. Press Play to record to tape.",
         EngineState.Recording => "Recording to tape",
-        EngineState.Finished => "Finished",
+        EngineState.Finished => reason switch
+        {
+            StopReason.Duration => "Finished: captured the requested length",
+            StopReason.EndOfFiles => "Finished: all files recorded to tape",
+            StopReason.SignalLost => "Finished: the signal ended",
+            StopReason.DiskFull => "Stopped: the disk is almost full",
+            _ => "Finished",
+        },
         _ => IsCaptureTool ? "Not connected" : "Choose AVI files, then press Play to record them to tape.",
     };
+
+    private EngineState _lastState;
+    private long? _lastDiskCheck; // null: check at the next poll
+
+    // DV is about 3.6 MB/s of video and audio; type-2 AVIs carry the audio a
+    // second time. Every Nth frame divides the rate.
+    private const double DVBytesPerSecond = 3_800_000;
+    private static readonly TimeSpan DiskCheckInterval = TimeSpan.FromSeconds(2);
+
+    // Free space where captures go, and roughly how much DV fits. Only shown on
+    // the capture tab; checked every couple of seconds, not on every poll.
+    private void UpdateDiskSpace()
+    {
+        if (!IsCaptureTool)
+        {
+            DiskText = "";
+            return;
+        }
+        long now = Environment.TickCount64;
+        if (_lastDiskCheck is long last && now - last < DiskCheckInterval.TotalMilliseconds)
+            return;
+        _lastDiskCheck = now;
+
+        long? free = FreeBytesFor(CaptureFile.Trim());
+        if (free is null)
+        {
+            DiskText = "";
+            return;
+        }
+        double bytesPerSecond = DVBytesPerSecond / Math.Max(_settings.EveryNth, 1);
+        var left = TimeSpan.FromSeconds(Math.Max(0, (free.Value - ReserveBytes) / bytesPerSecond));
+        DiskText = $"{FormatBytes(free.Value)} free, {FormatDuration(left)} of DV";
+        IsDiskLow = left < TimeSpan.FromMinutes(15);
+    }
+
+    // Matches windv::kDiskReserveBytes: the engine stops capturing below it.
+    private const long ReserveBytes = 256L * 1024 * 1024;
+
+    private static long? FreeBytesFor(string fileBase)
+    {
+        try
+        {
+            string full = Path.GetFullPath(fileBase.Length > 0 ? fileBase : ".");
+            string? root = Path.GetPathRoot(full);
+            if (string.IsNullOrEmpty(root))
+                return null;
+            var drive = new DriveInfo(root);
+            return drive.IsReady ? drive.AvailableFreeSpace : null;
+        }
+        catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException
+                                      or NotSupportedException)
+        {
+            return null; // a network path or a half-typed name: just don't show it
+        }
+    }
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1L << 40 => $"{bytes / (double)(1L << 40):0.0} TB",
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):0} GB",
+        _ => $"{bytes / (double)(1L << 20):0} MB",
+    };
+
+    private static string FormatDuration(TimeSpan span) =>
+        span.TotalHours >= 1 ? $"about {span.TotalHours:0} h" : $"about {Math.Floor(span.TotalMinutes):0} min";
 
     private static string DeckModeText(EngineStatus s)
     {

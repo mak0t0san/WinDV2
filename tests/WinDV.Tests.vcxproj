@@ -47,8 +47,9 @@
   </ImportGroup>
 
   <PropertyGroup>
+    <RepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepoRoot>
     <!-- Next to WinDV.exe: Win32\Release\WinDV.Tests.exe -->
-    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(RepoRoot)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\obj\</IntDir>
     <TargetName>WinDV.Tests</TargetName>
   </PropertyGroup>
@@ -60,7 +61,7 @@
       <!-- DOCTEST_CONFIG_USE_STD_HEADERS: doctest otherwise forward-declares
            std::tuple, which MSVC 14.5x rejects (C5285). -->
       <PreprocessorDefinitions>WIN32;_CONSOLE;DOCTEST_CONFIG_USE_STD_HEADERS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)core;$(SolutionDir)external\doctest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(RepoRoot)core;$(RepoRoot)external\doctest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -91,6 +92,7 @@
 
   <ItemGroup>
     <ClCompile Include="TestMain.cpp" />
+    <ClCompile Include="CaptureGuardsTests.cpp" />
     <ClCompile Include="CaptureNamingTests.cpp" />
     <ClCompile Include="CommandLineTests.cpp" />
     <ClCompile Include="DVTimecodeTests.cpp" />

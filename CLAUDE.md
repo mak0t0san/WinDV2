@@ -182,6 +182,16 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
   It **must stay `WS_EX_LAYERED`**. WinUI's top-level window has no GDI redirection
   surface, so the legacy video renderer's output inside a plain child window is never
   shown (frames arrive, and the picture stays black).
+- **Never create an MSDV filter just to inspect it** (`BindToObject` then release).
+  Throwaway instances crashed the process about 1 launch in 3, with an access
+  violation in ntdll a few seconds later. `GetVideoDeviceList` identifies DV devices
+  from the property bag's `DevicePath` (`\\?\avc#...`, `windv::IsDVDevicePath`),
+  without opening them.
+- Capture stops on its own with a `StopReason` (duration, signal lost, disk full), and
+  the UI explains why. Free-space and signal-loss rules live in
+  `core/CaptureGuards`. The capture loop polls with `FrameQueue::GetFor(250 ms)` so it
+  notices a missing signal. The camcorder keeps sending frames while paused and stops
+  only when the tape stops.
 - Camcorders report trick-play modes (`PLAY_FAST_FWD_1..6`, `PLAY_FAST_REV_1..6`, `_X`,
   `REVERSE_FREEZE`) rather than the `PLAY_FASTEST_*` they were sent. `ToDeckMode` in
   `DVDevice.cpp` maps each family.

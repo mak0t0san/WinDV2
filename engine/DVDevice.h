@@ -6,7 +6,8 @@
 #include "OutputGraph.h"
 #include "TransportLogic.h"
 
-// Friendly names of all video capture devices.
+// Friendly names of the DV video capture devices (camcorders and decks on the
+// FireWire AV/C bus, not webcams). If none are DV, all devices are listed.
 std::vector<std::wstring> GetVideoDeviceList();
 
 // Camcorder transport control (play/pause/record) through IAMExtTransport.

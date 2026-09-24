@@ -2,6 +2,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -37,6 +38,10 @@ public:
 	// The returned data stays valid until the next call to Get().
 	std::optional<Frame> Get();
 
+	// Like Get(), but gives up after timeout. nullopt then means either a
+	// timeout or a closed, drained queue; tell them apart with IsClosed().
+	std::optional<Frame> GetFor(std::chrono::milliseconds timeout);
+
 	void Close();
 
 	bool IsClosed() const { return m_closed.load(); }
@@ -51,6 +56,8 @@ private:
 	};
 
 	std::uint8_t* SlotData(std::size_t index) { return m_storage.data() + index * m_frameSize; }
+	// Takes the head frame; the lock is held and the queue is not empty.
+	Frame TakeLocked(std::unique_lock<std::mutex>& lock);
 
 	const std::size_t m_capacity;
 	const std::size_t m_frameSize;

@@ -30,6 +30,7 @@ CAVIWriter::CAVIWriter(const std::wstring& base, const std::wstring& dtformat, i
     : COutputGraph(type), m_dvTime(dvTime), m_base(base), m_dtformat(dtformat), m_ndigits(ndigits)
 {
 	m_tmpfile = NextCaptureFilename(m_base, L"~" + m_dtformat, m_ndigits, m_dvTime);
+	m_failureMessage = L"Can't write " + m_tmpfile;
 
 	CComPtr<IBaseFilter> mux;
 	CComPtr<IFileSinkFilter> sink;

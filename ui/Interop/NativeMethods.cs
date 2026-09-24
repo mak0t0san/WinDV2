@@ -52,6 +52,16 @@ public enum DeckMode
     RecordPaused = 9,
 }
 
+/// <summary>Why the pipeline finished on its own (DVEngine::StopReason).</summary>
+public enum StopReason
+{
+    None = 0,
+    Duration = 1,
+    EndOfFiles = 2,
+    SignalLost = 3,
+    DiskFull = 4,
+}
+
 internal enum NativeEvent
 {
     DVTimeChanged = 1,
@@ -76,6 +86,8 @@ internal struct NativeStatus
     public int QueueLoad;
     public int QueueCapacity;
     public int FramesReceived;
+    public int StopReason;
+    public int Reserved;
     public long Time;
     public long DVTime;
 }
@@ -89,6 +101,7 @@ internal struct NativeOptions
     public int EveryNth;
     public int RecordPreview;
     public int DeckFollowsPipeline;
+    public int SignalLossSeconds;
 }
 
 [StructLayout(LayoutKind.Sequential)]

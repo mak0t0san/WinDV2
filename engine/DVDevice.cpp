@@ -3,6 +3,7 @@
 #include "DShowBase.h"
 #include "DVDevice.h"
 
+#include "CaptureGuards.h"
 #include "DShowError.h"
 
 namespace {
@@ -122,16 +123,34 @@ CComPtr<IBaseFilter> FindVideoDevice(const std::wstring& device)
 	return filter;
 }
 
+// The device's interface path from its property bag, or "" if it has none
+// (software sources usually don't).
+std::wstring DevicePath(IMoniker* moniker, IBindCtx* bindContext)
+{
+	CComPtr<IPropertyBag> bag;
+	CComVariant path;
+	if (SUCCEEDED(moniker->BindToStorage(bindContext, nullptr, IID_PPV_ARGS(&bag))) &&
+	    SUCCEEDED(bag->Read(L"DevicePath", &path, nullptr)) && path.vt == VT_BSTR)
+		return path.bstrVal;
+	return {};
+}
+
 } // namespace
 
 std::vector<std::wstring> GetVideoDeviceList()
 {
-	std::vector<std::wstring> list;
-	ForEachVideoDevice([&](const std::wstring& name, IMoniker*, IBindCtx*) {
-		list.push_back(name);
+	// DV devices are recognised by their bus (the device path), without opening
+	// them: creating and dropping a throwaway MSDV filter crashed the process
+	// now and then.
+	std::vector<std::wstring> all, dv;
+	ForEachVideoDevice([&](const std::wstring& name, IMoniker* moniker, IBindCtx* bindContext) {
+		all.push_back(name);
+		if (windv::IsDVDevicePath(DevicePath(moniker, bindContext)))
+			dv.push_back(name);
 		return true;
 	});
-	return list;
+	// Unusual DV hardware on another bus shouldn't leave the list empty.
+	return dv.empty() ? all : dv;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -251,6 +270,7 @@ long CDVInput::GetDroppedFrames()
 
 CDVOutput::CDVOutput(const std::wstring& device, const CMediaType& type) : COutputGraph(type, 10)
 {
+	m_failureMessage = L"The DV device stopped accepting video";
 	CComPtr<IBaseFilter> sink = FindVideoDevice(device);
 	CtrlAttach(sink);
 	CheckHR(m_FG->AddFilter(sink, L"DVout"), L"Can't add the DV device to the graph");

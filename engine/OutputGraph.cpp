@@ -155,5 +155,27 @@ void COutputGraph::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> fr
 	m_time = end;
 	sample->SetSyncPoint(TRUE);
 
-	Deliver(sample);
+	CheckSucceeded(Deliver(sample), m_failureMessage);
+	if (++m_framesSinceCheck >= 25) {
+		m_framesSinceCheck = 0;
+		CheckForErrors();
+	}
+}
+
+void COutputGraph::CheckForErrors()
+{
+	long code = 0;
+	LONG_PTR param1 = 0, param2 = 0;
+	while (m_ME->GetEvent(&code, &param1, &param2, 0) == S_OK) {
+		const HRESULT hr = static_cast<HRESULT>(param1);
+		m_ME->FreeEventParams(code, param1, param2);
+		switch (code) {
+		case EC_ERRORABORT:
+		case EC_ERRORABORTEX:
+		case EC_STREAM_ERROR_STOPPED:
+			throw DShowError(m_failureMessage, FAILED(hr) ? hr : E_FAIL);
+		default:
+			break;
+		}
+	}
 }

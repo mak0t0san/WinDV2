@@ -34,6 +34,8 @@ protected:
 class DVEngine : private CFrameHandler {
 public:
 	enum State { Idle, RecordPaused, Recording, CapturePaused, Capturing, Finished };
+	// Why the pipeline reached Finished on its own.
+	enum class StopReason { None, Duration, EndOfFiles, SignalLost, DiskFull };
 
 	explicit DVEngine(DVEngineEvents* events);
 	~DVEngine() override;
@@ -48,6 +50,9 @@ public:
 	std::atomic<int> m_everyNth{1};
 	std::atomic<bool> m_recordPreview{true};
 	std::atomic<bool> m_DVctrl{false};
+	// Capture: stop (and finish the file) after this many seconds without a DV
+	// signal, e.g. at the end of the tape. 0 keeps waiting.
+	std::atomic<int> m_signalLossSeconds{0};
 
 	// The window the preview is drawn into; takes effect at the next Build*().
 	void SetPreviewWindow(HWND hWnd) { m_previewWnd = hWnd; }
@@ -62,10 +67,10 @@ public:
 	std::time_t GetDVTime() const { return m_dvTime; }
 	// Frames delivered by the source since the pipeline was built; shows whether
 	// a signal is arriving at all.
-	long GetFramesReceived() const
-	{
-		return m_framesReceived;
-	} // Returns and clears the last error reported by a worker thread.
+	long GetFramesReceived() const { return m_framesReceived; }
+	// Why the last capture or recording ended by itself (state Finished).
+	StopReason GetStopReason() const { return m_stopReason; }
+	// Returns and clears the last error reported by a worker thread.
 	std::wstring TakeError();
 
 	void Destroy();
@@ -100,6 +105,8 @@ private:
 	void CaptureLoop();
 	void RecordLoop();
 	void FinishWriter();
+	// Moves Capturing (or Recording) to Finished, recording why.
+	void FinishOnItsOwn(State from, StopReason reason);
 	void ReportError(const std::wstring& message);
 	void NotifyTimeChange(std::time_t dvTime);
 	void StartWorker(void (DVEngine::*worker)(std::stop_token));
@@ -127,4 +134,5 @@ private:
 	std::atomic<REFERENCE_TIME> m_captureTime{0};
 	std::atomic<std::time_t> m_dvTime{0};
 	std::atomic<long> m_framesReceived{0};
+	std::atomic<StopReason> m_stopReason{StopReason::None};
 };

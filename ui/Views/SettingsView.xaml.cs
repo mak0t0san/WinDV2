@@ -34,6 +34,11 @@ public sealed partial class SettingsView : UserControl
         ThresholdBox.Value = settings.DiscontinuityThreshold;
         MaxFramesBox.Value = settings.MaxAVIFrames;
         EveryNthBox.Value = settings.EveryNth;
+        SignalLossSwitch.IsOn = settings.SignalLossSeconds > 0;
+        SignalLossBox.Value = settings.SignalLossSeconds > 0
+            ? settings.SignalLossSeconds
+            : SettingsStore.DefaultSignalLossSeconds;
+        SignalLossBox.IsEnabled = SignalLossSwitch.IsOn;
 
         DateFormatBox.Items.Clear();
         DateFormatBox.Items.Add(settings.DateTimeFormat);
@@ -71,6 +76,9 @@ public sealed partial class SettingsView : UserControl
 
     private void DigitsBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateExample();
 
+    private void SignalLossSwitch_Toggled(object sender, RoutedEventArgs e) =>
+        SignalLossBox.IsEnabled = SignalLossSwitch.IsOn;
+
     // Shows what a capture file name looks like with these settings.
     private void UpdateExample()
     {
@@ -106,6 +114,9 @@ public sealed partial class SettingsView : UserControl
         _settings.DiscontinuityThreshold = ReadNumber(ThresholdBox, 0, _settings.DiscontinuityThreshold);
         _settings.MaxAVIFrames = ReadNumber(MaxFramesBox, 10, _settings.MaxAVIFrames);
         _settings.EveryNth = ReadNumber(EveryNthBox, 1, _settings.EveryNth);
+        _settings.SignalLossSeconds = SignalLossSwitch.IsOn
+            ? Math.Min(ReadNumber(SignalLossBox, 1, SettingsStore.DefaultSignalLossSeconds), 3600)
+            : 0;
         _settings.UseDateTimeFormat(format);
         _settings.SuffixDigits = Math.Max(DigitsBox.SelectedIndex, 0);
         _settings.AVIPrefix = PrefixBox.Text.Trim();

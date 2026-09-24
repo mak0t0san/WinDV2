@@ -19,6 +19,7 @@ public readonly record struct EngineStatus(
     int QueueLoad,
     int QueueCapacity,
     int FramesReceived,
+    StopReason StopReason,
     long Time,
     long DVTime);
 
@@ -28,7 +29,8 @@ public sealed record EngineOptions(
     int MaxAVIFrames,
     int EveryNth,
     bool RecordPreview,
-    bool DeckFollowsPipeline);
+    bool DeckFollowsPipeline,
+    int SignalLossSeconds);
 
 public sealed record ParsedCommandLine(CommandLineMode Mode, bool ExitOnFinish, long Duration, string Files);
 
@@ -169,10 +171,10 @@ public sealed unsafe class DVEngine : IDisposable
     public EngineStatus GetStatus()
     {
         if (_handle == 0)
-            return new EngineStatus(EngineState.Idle, DeckMode.Unknown, false, 0, -1, 0, 0, 0, -1, 0);
+            return new EngineStatus(EngineState.Idle, DeckMode.Unknown, false, 0, -1, 0, 0, 0, StopReason.None, -1, 0);
         NativeMethods.GetStatus(_handle, out var s);
         return new EngineStatus((EngineState)s.State, (DeckMode)s.DeckMode, s.CanControlDeck != 0, s.Dropped,
-            s.Counter, s.QueueLoad, s.QueueCapacity, s.FramesReceived, s.Time, s.DVTime);
+            s.Counter, s.QueueLoad, s.QueueCapacity, s.FramesReceived, (StopReason)s.StopReason, s.Time, s.DVTime);
     }
 
     public void SetOptions(EngineOptions options)
@@ -185,6 +187,7 @@ public sealed unsafe class DVEngine : IDisposable
             EveryNth = options.EveryNth,
             RecordPreview = options.RecordPreview ? 1 : 0,
             DeckFollowsPipeline = options.DeckFollowsPipeline ? 1 : 0,
+            SignalLossSeconds = options.SignalLossSeconds,
         };
         NativeMethods.SetOptions(_handle, in native);
     }

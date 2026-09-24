@@ -37,6 +37,9 @@ public sealed class SettingsStore
     public string DateTimeFormat { get; set; } = "%y-%m-%d_%H-%M";
     public List<string> DateTimeFormatHistory { get; set; } = [];
     public int SuffixDigits { get; set; } = 2;
+    /// <summary>Stop capturing after this many seconds without a DV signal (end of tape); 0 = never.</summary>
+    public int SignalLossSeconds { get; set; }
+    public const int DefaultSignalLossSeconds = 10;
 
     // Record
     public string RecordDevice { get; set; } = DefaultDevice;
@@ -73,6 +76,8 @@ public sealed class SettingsStore
         s.DateTimeFormatHistory = GetString(capture, "DateTimeFormatHistory", DefaultFormatHistory)
             .Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
         s.SuffixDigits = Math.Clamp(GetInt(capture, "SuffixDigits", 2), 0, 4);
+        // New in WinDV 2; the original ignores it.
+        s.SignalLossSeconds = Math.Clamp(GetInt(capture, "StopOnSignalLoss", 0), 0, 3600);
 
         s.RecordDevice = GetString(record, "DVDevice", DefaultDevice);
         s.RecordFile = GetString(record, "File", "");
@@ -107,6 +112,7 @@ public sealed class SettingsStore
             capture.SetValue("DateTimeFormatHistory", string.Join("\n", DateTimeFormatHistory),
                 RegistryValueKind.String);
             SetInt(capture, "SuffixDigits", SuffixDigits);
+            SetInt(capture, "StopOnSignalLoss", SignalLossSeconds);
         }
         using (RegistryKey record = root.CreateSubKey("Record"))
         {

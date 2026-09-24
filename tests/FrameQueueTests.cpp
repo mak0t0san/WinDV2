@@ -85,6 +85,30 @@ TEST_CASE("Get blocks while empty until a frame arrives")
 	CHECK(consumer.get());
 }
 
+TEST_CASE("GetFor times out on an empty queue, and returns frames that arrive")
+{
+	FrameQueue queue(2, 4);
+	const auto start = std::chrono::steady_clock::now();
+	CHECK_FALSE(queue.GetFor(30ms).has_value());
+	CHECK(std::chrono::steady_clock::now() - start >= 25ms);
+	CHECK_FALSE(queue.IsClosed()); // a timeout, not the end
+
+	REQUIRE(queue.Put(5, Bytes(4, 3)));
+	auto frame = queue.GetFor(1s);
+	REQUIRE(frame.has_value());
+	CHECK(frame->duration == 5);
+
+	auto consumer = std::async(std::launch::async, [&] { return queue.GetFor(5s).has_value(); });
+	std::this_thread::sleep_for(20ms);
+	REQUIRE(queue.Put(6, Bytes(4, 4)));
+	REQUIRE(consumer.wait_for(5s) == std::future_status::ready);
+	CHECK(consumer.get());
+
+	queue.Close();
+	CHECK_FALSE(queue.GetFor(1s).has_value());
+	CHECK(queue.IsClosed());
+}
+
 TEST_CASE("Close wakes blocked threads and drains remaining frames")
 {
 	SUBCASE("blocked consumer")

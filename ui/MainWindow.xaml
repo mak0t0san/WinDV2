@@ -221,7 +221,8 @@
 
             <!-- Errors and status -->
             <StackPanel Grid.Row="4" Spacing="8">
-                <InfoBar Severity="Error" Title="Something went wrong"
+                <InfoBar Severity="{x:Bind ViewModel.ErrorSeverity, Mode=OneWay}"
+                         Title="{x:Bind ViewModel.ErrorTitle, Mode=OneWay}"
                          Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
                          IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                          Closed="ErrorBar_Closed" />
@@ -245,8 +246,18 @@
                         <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" Width="16" Height="16" />
                         <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.DroppedText, Mode=OneWay}"
-                               Foreground="{ThemeResource SystemFillColorCautionBrush}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind ViewModel.DroppedText, Mode=OneWay}"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    Visibility="{x:Bind local:Ui.ShowText(ViewModel.DiskText), Mode=OneWay}"
+                                    ToolTipService.ToolTip="Free space where captures are saved, and roughly how much DV video fits. Capture stops by itself, with the file saved, if the disk gets nearly full.">
+                            <FontIcon Glyph="&#xEDA2;" FontSize="14"
+                                      Foreground="{x:Bind local:Ui.DiskBrush(ViewModel.IsDiskLow), Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind ViewModel.DiskText, Mode=OneWay}"
+                                       Foreground="{x:Bind local:Ui.DiskBrush(ViewModel.IsDiskLow), Mode=OneWay}" />
+                        </StackPanel>
+                    </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                                 Visibility="{x:Bind local:Ui.Show(ViewModel.IsQueueVisible), Mode=OneWay}"
                                 ToolTipService.ToolTip="Frames waiting between the source and the destination">

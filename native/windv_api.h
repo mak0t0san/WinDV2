@@ -96,8 +96,10 @@ typedef struct windv_status {
 	int32_t queueLoad;      /* frames waiting between source and sink */
 	int32_t queueCapacity;
 	int32_t framesReceived; /* frames from the source since the pipeline was built */
-	int64_t time;           /* position in 100 ns units; -1 when idle */
-	int64_t dvTime;         /* camcorder recording time (time_t, local); 0 if unknown */
+	int32_t stopReason;     /* windv_stop_reason: why state became WINDV_FINISHED */
+	int32_t reserved;
+	int64_t time;   /* position in 100 ns units; -1 when idle */
+	int64_t dvTime; /* camcorder recording time (time_t, local); 0 if unknown */
 } windv_status;
 
 typedef struct windv_options {
@@ -107,7 +109,17 @@ typedef struct windv_options {
 	int32_t everyNth;               /* capture: keep every Nth frame */
 	int32_t recordPreview;          /* record: show the picture */
 	int32_t deckFollowsPipeline;    /* the deck plays/pauses/records with capture and record */
+	int32_t signalLossSeconds;      /* capture: stop after N s without a DV signal; 0 = never */
 } windv_options;
+
+/* Same values as DVEngine::StopReason. */
+typedef enum windv_stop_reason {
+	WINDV_STOP_NONE = 0,
+	WINDV_STOP_DURATION = 1,     /* capture reached the requested duration */
+	WINDV_STOP_END_OF_FILES = 2, /* record: all files sent to tape */
+	WINDV_STOP_SIGNAL_LOST = 3,  /* capture: no DV signal for signalLossSeconds */
+	WINDV_STOP_DISK_FULL = 4,    /* capture: disk nearly full; the file was finished */
+} windv_stop_reason;
 
 typedef enum windv_command_mode {
 	WINDV_COMMAND_INTERACTIVE = 0,

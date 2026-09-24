@@ -5,6 +5,7 @@
 
 #include "AviSource.h"
 #include "AviWriter.h"
+#include "CaptureGuards.h"
 #include "ComApartment.h"
 #include "DShowError.h"
 #include "DVDevice.h"
@@ -14,6 +15,23 @@
 namespace {
 
 constexpr std::size_t kQueueFrames = 100;
+// How long the capture loop waits for a frame before checking the signal watch.
+constexpr std::chrono::milliseconds kSignalPoll{250};
+// Free space is checked about once a second of video.
+constexpr int kDiskCheckFrames = 25;
+
+// Free bytes available to this user where a capture with this base name goes,
+// or nullopt if that can't be found out (the capture then just carries on).
+std::optional<std::uint64_t> FreeDiskBytes(const std::wstring& fileBase)
+{
+	std::wstring dir = windv::CaptureDirectory(fileBase);
+	if (dir.empty())
+		dir = L".";
+	ULARGE_INTEGER freeBytes{};
+	if (!GetDiskFreeSpaceExW(dir.c_str(), &freeBytes, nullptr, nullptr))
+		return std::nullopt;
+	return freeBytes.QuadPart;
+}
 
 } // namespace
 
@@ -97,6 +115,7 @@ void DVEngine::Destroy()
 	m_time = -1;
 	m_captureTime = 0;
 	m_framesReceived = 0;
+	m_stopReason = StopReason::None;
 }
 
 void DVEngine::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame)
@@ -170,6 +189,13 @@ void DVEngine::StartCapturing(const std::wstring& filename, const std::wstring& 
 {
 	if (m_state != CapturePaused)
 		return;
+	if (const auto freeBytes = FreeDiskBytes(filename); freeBytes && windv::IsDiskNearlyFull(*freeBytes)) {
+		const std::wstring dir = windv::CaptureDirectory(filename);
+		throw DShowError(L"Not enough free disk space to capture to " + (dir.empty() ? L"the current folder" : dir) +
+		                 L" (" + std::to_wstring(*freeBytes / (1024 * 1024)) + L" MB free; " +
+		                 std::to_wstring(windv::kDiskReserveBytes / (1024 * 1024)) + L" MB are kept in reserve)");
+	}
+	m_stopReason = StopReason::None;
 	{
 		std::lock_guard lock(m_mutex);
 		m_target = {filename, dtformat, ndigits};
@@ -210,6 +236,7 @@ void DVEngine::StopRecording()
 
 void DVEngine::StartRecording()
 {
+	m_stopReason = StopReason::None;
 	State expected = RecordPaused;
 	if (m_state.compare_exchange_strong(expected, Recording) && m_DVctrl)
 		m_dvOutput->CtrlRecord();
@@ -256,6 +283,15 @@ void DVEngine::FinishWriter()
 		writer->Finish();
 }
 
+void DVEngine::FinishOnItsOwn(State from, StopReason reason)
+{
+	// The reason goes first, so whoever sees Finished also sees why.
+	m_stopReason = reason;
+	State expected = from;
+	if (!m_state.compare_exchange_strong(expected, Finished))
+		m_stopReason = StopReason::None;
+}
+
 void DVEngine::CaptureLoop()
 {
 	CMediaType type;
@@ -268,10 +304,38 @@ void DVEngine::CaptureLoop()
 	m_counter = 0;
 	m_time = 0;
 
+	// Per capture (each REC): the signal watch, and the folder whose free space
+	// is checked about once a second.
+	bool wasCapturing = false;
+	windv::SignalWatch signal;
+	std::wstring captureFile;
+	int framesSinceDiskCheck = 0;
+
 	while (m_state != Idle) {
-		const auto frame = m_queue->Get();
-		if (!frame)
-			break;
+		// Wake up regularly even without frames, to notice the signal is gone.
+		const auto frame = m_queue->GetFor(kSignalPoll);
+		const auto now = windv::SignalWatch::Clock::now();
+
+		const bool capturing = m_state == Capturing;
+		if (capturing && !wasCapturing) {
+			signal = windv::SignalWatch(std::chrono::seconds((std::max)(m_signalLossSeconds.load(), 0)));
+			std::lock_guard lock(m_mutex);
+			captureFile = m_target.filename;
+			framesSinceDiskCheck = kDiskCheckFrames; // check straight away
+		}
+		wasCapturing = capturing;
+
+		if (!frame) {
+			if (m_queue->IsClosed())
+				break;
+			if (capturing && signal.Lost(now)) {
+				FinishWriter();
+				FinishOnItsOwn(Capturing, StopReason::SignalLost);
+			}
+			continue;
+		}
+		if (capturing)
+			signal.Frame(now);
 
 		// Track the camcorder's recording timestamp; a jump means a new scene.
 		const std::time_t newDVTime = windv::GetDVRecordingTime(frame->data).value_or(0);
@@ -290,6 +354,15 @@ void DVEngine::CaptureLoop()
 		// Only preview while the queue is draining comfortably.
 		if (m_monitor && m_queue->Load() < m_queue->Capacity() / 2)
 			m_monitor->HandleFrame(frame->duration, frame->data);
+
+		if (m_state == Capturing && ++framesSinceDiskCheck >= kDiskCheckFrames) {
+			framesSinceDiskCheck = 0;
+			// Stop while there is still room to finish the file properly.
+			if (const auto freeBytes = FreeDiskBytes(captureFile); freeBytes && windv::IsDiskNearlyFull(*freeBytes)) {
+				FinishWriter();
+				FinishOnItsOwn(Capturing, StopReason::DiskFull);
+			}
+		}
 
 		if (m_state == Capturing) {
 			const int threshold = m_discontinuityThreshold;
@@ -319,8 +392,7 @@ void DVEngine::CaptureLoop()
 			const REFERENCE_TIME captureTime = m_captureTime;
 			if (captureTime && m_time >= captureTime) {
 				m_captureTime = 0;
-				State expected = Capturing;
-				m_state.compare_exchange_strong(expected, Finished);
+				FinishOnItsOwn(Capturing, StopReason::Duration);
 			}
 			m_dropped = m_dvInput->GetDroppedFrames() - dropped;
 		} else {
@@ -374,12 +446,10 @@ void DVEngine::RecordLoop()
 		if (m_state == Recording) {
 			++m_counter;
 			m_time += frame->duration;
-			if (auto next = m_queue->Get()) {
+			if (auto next = m_queue->Get())
 				frame = next;
-			} else {
-				State expected = Recording;
-				m_state.compare_exchange_strong(expected, Finished);
-			}
+			else
+				FinishOnItsOwn(Recording, StopReason::EndOfFiles);
 		}
 	}
 }

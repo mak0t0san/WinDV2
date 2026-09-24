@@ -24,6 +24,9 @@ public static class Ui
 
     public static string RecLabel(bool capturing) => capturing ? "Stop REC" : "REC";
 
+    public static Brush DiskBrush(bool low) => (Brush)Application.Current.Resources[
+        low ? "SystemFillColorCautionBrush" : "TextFillColorSecondaryBrush"];
+
     public static Brush SignalBrush(bool hasSignal) => (Brush)Application.Current.Resources[
         hasSignal ? "SystemFillColorSuccessBrush" : "SystemFillColorCautionBrush"];
 }

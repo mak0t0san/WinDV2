@@ -24,8 +24,16 @@ protected:
 	void DeliverEndOfStream();
 	void WaitForCompletion();
 
+	// Throws DShowError if a filter downstream has reported an error (e.g. the
+	// file writer on a full disk). HandleFrame calls it about once a second.
+	void CheckForErrors();
+
+	// What HandleFrame's errors say failed, e.g. "Can't write D:\dv\~tape.avi".
+	std::wstring m_failureMessage = L"The output stopped with an error";
+
 private:
 	CMediaType m_type;
 	REFERENCE_TIME m_time = 0;
 	int m_queueDepth;
+	unsigned m_framesSinceCheck = 0;
 };

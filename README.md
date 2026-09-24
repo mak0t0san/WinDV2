@@ -237,6 +237,28 @@ WinUI app.
   `.clang-format`.
 - WinDV keeps the machine awake while capturing or recording, not just the display.
 
+### Petr's unfinished TODO list
+
+The original author's changelog listed a few things that never made it into a release.
+They are done now:
+
+- **I/O error checking.** Every frame written is checked, and so are the file
+  writer's error events. A write failure mid-capture (full disk, unplugged drive) now
+  stops with a message and keeps what was captured, instead of being ignored.
+- **Free disk space.** The capture tab shows free space and roughly how many hours of
+  DV fit. REC refuses to start with less than 256 MB free. A running capture stops
+  itself at that reserve, with the file finished properly.
+- **End-of-signal auto-stop** (optional, in Settings). When no video arrives for N
+  seconds, for example at the end of the recorded part of a tape, the capture
+  finishes by itself. It only triggers after video has arrived, so starting REC
+  before the tape rolls is safe.
+- **Only DV devices are listed.** Webcams and other video sources are left out. A DV
+  device is recognised by its FireWire AV/C bus, and if none is found, every device
+  is listed.
+
+(The other items from his unreleased 1.2.4 were already covered: the fix for folder
+names containing dots, and the switch away from the old Platform SDK.)
+
 ### Unchanged on purpose
 
 - Registry settings live under the same key (`HKCU\Software\Petr Mourek\WinDV 1.2`,

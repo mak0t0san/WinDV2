@@ -56,6 +56,18 @@
                                        ToolTipService.ToolTip="1 keeps every frame. Higher values make time-lapse captures." />
                         </Grid>
 
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="16">
+                                <ToggleSwitch x:Name="SignalLossSwitch" Header="Stop when the signal ends"
+                                              Toggled="SignalLossSwitch_Toggled" />
+                                <NumberBox x:Name="SignalLossBox" Header="after (seconds)" Minimum="1" Maximum="3600"
+                                           SpinButtonPlacementMode="Compact" MinWidth="140" VerticalAlignment="Bottom" />
+                            </StackPanel>
+                            <TextBlock TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Text="Finishes the capture on its own when no video has arrived for this long, for example at the end of the recorded part of a tape. Leave it off if your tapes have blank gaps between recordings." />
+                        </StackPanel>
+
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="2*" />
