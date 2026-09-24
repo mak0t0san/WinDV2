@@ -32,7 +32,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>2.2.2</Version>
+    <Version>2.3.0</Version>
     <Product>WinDV</Product>
     <Authors>Makoto</Authors>
     <Company>Makoto</Company>
