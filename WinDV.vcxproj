@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{7C3A9E14-52B8-4D06-8F27-3A1B5C9D2E10}</ProjectGuid>
+    <RootNamespace>WinDV</RootNamespace>
+    <Keyword>MFCProj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <!-- Original project is MBCS, not Unicode. Static MFC keeps the .exe
+         self-contained so it runs without the MFC redistributable. -->
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseOfMfc>Static</UseOfMfc>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\obj\</IntDir>
+    <TargetName>WinDV</TargetName>
+    <!-- WinDV.rc already embeds WinDV.exe.manifest as resource ID 1, which is
+         the ID the linker's generated manifest would use. Keep the original. -->
+    <GenerateManifest>false</GenerateManifest>
+    <BaseClassesDir>$(ProjectDir)external\baseclasses\</BaseClassesDir>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <DisableSpecificWarnings>4996;4100;4189;4245;4389;4018;4267;4302;4311;4312;4456;4457;4459;5040;4995;4838</DisableSpecificWarnings>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_MBCS;_WIN32_DCOM;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(BaseClassesDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <ConformanceMode>false</ConformanceMode>
+      <LanguageStandard>Default</LanguageStandard>
+      <SDLCheck>false</SDLCheck>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <MinimalRebuild>false</MinimalRebuild>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Culture>0x0409</Culture>
+    </ResourceCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <!-- largeint.lib and olepro32.lib no longer ship in the Windows SDK; the
+           functionality they provided is in the CRT / oleaut32 now. -->
+      <AdditionalDependencies>winmm.lib;kernel32.lib;advapi32.lib;version.lib;user32.lib;gdi32.lib;comctl32.lib;ole32.lib;oleaut32.lib;uuid.lib;strmiids.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(BaseClassesDir)$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <Optimization>Disabled</Optimization>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClCompile Include="StdAfx.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="CaptureCfg.cpp" />
+    <ClCompile Include="DropFilesEdit.cpp" />
+    <ClCompile Include="DShow.cpp" />
+    <ClCompile Include="DV.cpp" />
+    <ClCompile Include="DVToolsDlg.cpp" />
+    <ClCompile Include="RecordCfg.cpp" />
+    <ClCompile Include="ToolTab.cpp" />
+    <ClCompile Include="VideoDeviceSel.cpp" />
+    <ClCompile Include="WinDV.cpp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClInclude Include="CaptureCfg.h" />
+    <ClInclude Include="DropFilesEdit.h" />
+    <ClInclude Include="DShow.h" />
+    <ClInclude Include="DV.h" />
+    <ClInclude Include="DVToolsDlg.h" />
+    <ClInclude Include="RecordCfg.h" />
+    <ClInclude Include="Resource.h" />
+    <ClInclude Include="StdAfx.h" />
+    <ClInclude Include="ToolTab.h" />
+    <ClInclude Include="VideoDeviceSel.h" />
+    <ClInclude Include="WinDV.h" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ResourceCompile Include="WinDV.rc" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="WinDV.exe.manifest" />
+    <None Include="res\WinDV.rc2" />
+    <Image Include="res\WinDV.ico" />
+    <Image Include="res\WinDVlogo.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="external\baseclasses\baseclasses.vcxproj">
+      <Project>{b45e1c2a-7f3d-4a91-9c10-6d2e8b4f1a00}</Project>
+    </ProjectReference>
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

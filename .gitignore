@@ -1,0 +1,31 @@
+# Build output
+Win32/
+x64/
+[Dd]ebug/
+[Rr]elease/
+
+# Visual Studio per-user state and caches
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+*.ncb
+
+# Resource editor binary cache (regenerated from WinDV.rc)
+*.aps
+
+# Build intermediates
+*.obj
+*.res
+*.pch
+*.ipch
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.tlog
+*.lastbuildstate
+*.log
