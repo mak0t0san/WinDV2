@@ -61,6 +61,20 @@ SolidCompression=yes
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+; Up to 2.2.0 the app shipped with the .NET runtime (not Native AOT): ~390 files the
+; current app doesn't use. Remove them when upgrading such an install, which
+; WinDV.runtimeconfig.json identifies. It is deleted last, because the Check runs
+; again for each entry.
+[InstallDelete]
+Type: files; Name: "{app}\*.dll"; Check: IsDotNetRuntimeInstall
+Type: files; Name: "{app}\*.xbf"; Check: IsDotNetRuntimeInstall
+Type: files; Name: "{app}\createdump.exe"; Check: IsDotNetRuntimeInstall
+Type: filesandordirs; Name: "{app}\Views"; Check: IsDotNetRuntimeInstall
+; The ~85 WinUI language folders (de-DE, sr-Latn-RS, ...); only en-us is reinstalled.
+Type: filesandordirs; Name: "{app}\*-*"; Check: IsDotNetRuntimeInstall
+Type: files; Name: "{app}\WinDV.deps.json"; Check: IsDotNetRuntimeInstall
+Type: files; Name: "{app}\WinDV.runtimeconfig.json"; Check: IsDotNetRuntimeInstall
+
 [Files]
 Source: "{#AppDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -70,3 +84,9 @@ Name: "{autodesktop}\WinDV 2"; Filename: "{app}\WinDV.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\WinDV.exe"; Description: "{cm:LaunchProgram,WinDV 2}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function IsDotNetRuntimeInstall: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{app}\WinDV.runtimeconfig.json'));
+end;
