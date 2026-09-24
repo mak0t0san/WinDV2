@@ -1,0 +1,12 @@
+# Text files are stored with LF in the repository and checked out with the
+# platform's line endings (CRLF on Windows), whatever the committing tool or
+# the local core.autocrlf setting does. Without this, tools that stage files
+# on their own could commit CRLF copies, and whole files would show as changed.
+* text=auto
+
+# Visual Studio expects CRLF in solution files.
+*.sln text eol=crlf
+
+*.ico binary
+*.png binary
+*.bmp binary
