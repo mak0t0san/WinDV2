@@ -50,13 +50,16 @@
   </ImportGroup>
 
   <PropertyGroup>
-    <OutDir>$(ProjectDir)$(Platform)\$(Configuration)\</OutDir>
+    <!-- The project lives in app\; outputs stay at the repository root so
+         WinDV.exe and WinDV.Tests.exe land side by side in <Platform>\<Configuration>\. -->
+    <RepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepoRoot>
+    <OutDir>$(RepoRoot)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\obj\</IntDir>
     <TargetName>WinDV</TargetName>
     <!-- WinDV.rc already embeds WinDV.exe.manifest as resource ID 1, which is
          the ID the linker's generated manifest would use. Keep the original. -->
     <GenerateManifest>false</GenerateManifest>
-    <BaseClassesDir>$(ProjectDir)external\baseclasses\</BaseClassesDir>
+    <BaseClassesDir>$(RepoRoot)external\baseclasses\</BaseClassesDir>
   </PropertyGroup>
 
   <ItemDefinitionGroup>
@@ -64,7 +67,7 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <PreprocessorDefinitions>WIN32;_WINDOWS;_WIN32_DCOM;_WIN32_WINNT=0x0A00;WINVER=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(BaseClassesDir);$(ProjectDir)core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(BaseClassesDir);$(RepoRoot)core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
       <!-- /permissive- is off because the vendored <streams.h> does not compile
@@ -156,10 +159,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="external\baseclasses\baseclasses.vcxproj">
+    <ProjectReference Include="..\external\baseclasses\baseclasses.vcxproj">
       <Project>{b45e1c2a-7f3d-4a91-9c10-6d2e8b4f1a00}</Project>
     </ProjectReference>
-    <ProjectReference Include="core\WinDVCore.vcxproj">
+    <ProjectReference Include="..\core\WinDVCore.vcxproj">
       <Project>{3e8f6a21-9c47-4b5d-a1e3-7d2c9f0b4a61}</Project>
     </ProjectReference>
   </ItemGroup>

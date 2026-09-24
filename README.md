@@ -84,22 +84,27 @@ capture or recording finishes. Quote paths that contain spaces.
 ## Repository layout
 
 ```
-WinDV.sln                  Solution: baseclasses, WinDVCore, WinDV, WinDV.Tests
-WinDV.vcxproj              Application project (Win32/x64, Unicode, static MFC, v145)
-WinDV.cpp / WinDV.h        CWinApp entry point, file dialog helper
-DVToolsDlg.cpp / .h        Main dialog: tabs, status, command-line handling
-DShow.cpp / DShow.h        DirectShow layer (see below)
-CaptureCfg, RecordCfg      Settings pages
-VideoDeviceSel             Device picker dialog
-ToolTab, DropFilesEdit     UI helpers (tab control, drag-and-drop edit box)
-WinDV.rc, Resource.h       Resources; embeds WinDV.exe.manifest at ID 1
-res/                       Icons
-core/                      WinDVCore: standard C++ logic with no MFC or DirectShow
-tests/                     WinDV.Tests: doctest unit tests for core/
-external/baseclasses/      Vendored DirectShow base classes (MIT, Microsoft)
-external/doctest/          Vendored doctest 2.4.12 (MIT)
-WinDV.dsp / .dsw / .clw    Original Visual C++ 6 project files, kept for reference
+WinDV.sln                    Solution: baseclasses, WinDVCore, WinDV, WinDV.Tests
+app/                         The WinDV application (one project, sources and headers together)
+  WinDV.vcxproj              Application project (Win32/x64, Unicode, static MFC, v145)
+  WinDV.cpp / WinDV.h        CWinApp entry point, file dialog helper
+  DVToolsDlg.cpp / .h        Main dialog: tabs, status, command-line handling
+  DShow.cpp / DShow.h        DirectShow layer (see below)
+  CaptureCfg, RecordCfg      Settings pages
+  VideoDeviceSel             Device picker dialog
+  ToolTab, DropFilesEdit     UI helpers (tab control, drag-and-drop edit box)
+  WinDV.rc, Resource.h       Resources; embeds WinDV.exe.manifest at ID 1
+  res/                       Icons
+core/                        WinDVCore: standard C++ logic with no MFC or DirectShow
+tests/                       WinDV.Tests: doctest unit tests for core/
+external/baseclasses/        Vendored DirectShow base classes (MIT, Microsoft)
+external/doctest/            Vendored doctest 2.4.12 (MIT)
+legacy/                      Original VC6 WinDV.dsp/.dsw/.clw and a stale CppProperties.json,
+                             kept for reference only; not part of the build
 ```
+
+Each project folder keeps its `.cpp` and `.h` files side by side. Build output goes to
+`<Platform>\<Configuration>\` at the repository root for every project.
 
 ### The DirectShow layer
 

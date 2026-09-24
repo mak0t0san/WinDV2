@@ -12,8 +12,16 @@ now a Unicode C++20 app for Win32 and x64 built with Visual Studio 2026. See
 x64\Release\WinDV.Tests.exe
 ```
 
-Output: `<Platform>\<Configuration>\WinDV.exe` and `WinDV.Tests.exe`. Build order:
-`baseclasses` and `WinDVCore` (static libs), then `WinDV` and `WinDV.Tests`.
+Output: `<Platform>\<Configuration>\WinDV.exe` and `WinDV.Tests.exe` at the repository
+root. Build order: `baseclasses` and `WinDVCore` (static libs), then `WinDV` and
+`WinDV.Tests`.
+
+Layout: one folder per project, with `.cpp` and `.h` side by side (no src/include split;
+nothing outside a project includes its headers). The folders are `app/` (WinDV),
+`core/`, `tests/`, `external/` (vendored) and `legacy/` (VC6 files, not built).
+`app/WinDV.vcxproj` reaches the rest of the repo through its `$(RepoRoot)` property,
+so use that rather than `$(ProjectDir)` or `$(SolutionDir)` for paths outside `app/`.
+`$(SolutionDir)` is wrong when the project is built on its own.
 
 Before calling a change done, build **both platforms**: x64-only breakage (pointer
 casts, `UINT_PTR`, `OAHWND`) is invisible on Win32 and vice versa. Warnings are errors.
@@ -132,7 +140,7 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
   preserved deliberately: `stdafx.h` must be first in every WinDV `.cpp`.
 - Registry value names are a compatibility surface. Keep them, including the
   misspelled `DiscontinuityTreshold`.
-- The original VC6 `.dsp`/`.dsw`/`.clw` are kept for reference. They are not the build
-  system; `WinDV.sln` is.
-- `CppProperties.json` is a leftover from VS "Open Folder" mode. It does not affect
-  MSBuild; treat the `.sln` as authoritative if they disagree.
+- `legacy/` holds the original VC6 `.dsp`/`.dsw`/`.clw` and `CppProperties.json` (a
+  leftover from VS "Open Folder" mode that still declares the old MBCS/UNICODE defines).
+  None of it is built, and its paths predate the `app/` move. `WinDV.sln` is
+  authoritative.
