@@ -1,5 +1,6 @@
-# Builds WinDV for x64 and x86, runs the unit tests, and packages the WinUI app.
-# Pushing a tag like v2.0.0 also publishes a GitHub release with both zips.
+# Builds WinDV for x64 and x86, runs the unit tests, and packages the WinUI app
+# (build\package.ps1: an installer and a portable zip per architecture).
+# Pushing a tag like v2.0.0 also publishes a GitHub release with all four files.
 name: Build
 
 on:
@@ -56,25 +57,29 @@ jobs:
         shell: pwsh
         run: '& "${{ matrix.platform }}\Release\WinDV.Tests.exe"'
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
       - name: Package
         id: package
         shell: pwsh
         run: |
           $version = '${{ steps.version.outputs.version }}'
           if (-not $version) { $version = (Select-Xml -Path ui\WinDV.csproj -XPath '//Version').Node.InnerText + "-${{ github.sha }}".Substring(0, 12) }
-          $name = "WinDV-$version-${{ matrix.arch }}"
-          $out = "ui\bin\${{ matrix.dotnet }}\Release\net10.0-windows10.0.26100.0\win-${{ matrix.dotnet }}"
-          New-Item -ItemType Directory -Force "dist\$name" | Out-Null
-          Copy-Item "$out\*" "dist\$name" -Recurse
-          Get-ChildItem "dist\$name" -Recurse -Filter *.pdb | Remove-Item
-          Copy-Item README.md "dist\$name\README.md"
-          Compress-Archive -Path "dist\$name" -DestinationPath "dist\$name.zip"
-          "name=$name" >> $env:GITHUB_OUTPUT
+          build\package.ps1 -Arch ${{ matrix.arch }} -Version $version
+          "name=WinDV-$version-${{ matrix.arch }}" >> $env:GITHUB_OUTPUT
 
+      # The installer for most people, the zip for a portable copy.
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.package.outputs.name }}
-          path: dist/${{ steps.package.outputs.name }}.zip
+          path: |
+            dist/${{ steps.package.outputs.name }}-Setup.exe
+            dist/${{ steps.package.outputs.name }}-portable.zip
           if-no-files-found: error
 
   release:
@@ -98,4 +103,4 @@ jobs:
         run: |
           notes=".github/release-notes/${GITHUB_REF_NAME}.md"
           if [ -f "$notes" ]; then notes_args=(--notes-file "$notes"); else notes_args=(--generate-notes); fi
-          gh release create "$GITHUB_REF_NAME" dist/*.zip --title "WinDV ${GITHUB_REF_NAME#v}" "${notes_args[@]}"
+          gh release create "$GITHUB_REF_NAME" dist/*-Setup.exe dist/*.zip --title "WinDV ${GITHUB_REF_NAME#v}" "${notes_args[@]}"

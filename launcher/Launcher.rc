@@ -1,0 +1,3 @@
+// The launcher's only resource: the WinDV icon, so the portable zip's
+// top-level WinDV.exe looks like the app it starts.
+1 ICON "..\\ui\\Assets\\WinDV.ico"

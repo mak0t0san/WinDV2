@@ -11,8 +11,23 @@ A small Windows tool for moving DV video between a camcorder and disk over FireW
   files into one continuous recording.
 
 WinDV 2 is by Makoto, <https://github.com/mak0t0san/WinDV2>.
-**[Download the latest release](https://github.com/mak0t0san/WinDV2/releases/latest)**:
-unzip it and run `WinDV.exe`. Nothing needs installing.
+
+## Download
+
+Go to the **[latest release](https://github.com/mak0t0san/WinDV2/releases/latest)** and pick
+one file:
+
+- **`WinDV-x.y.z-x64-Setup.exe`** is the right choice for most people. Run it and
+  **WinDV 2** appears in the Start menu. It installs for your user account only, so it doesn't ask
+  for administrator rights, and you can remove it from *Settings > Apps*.
+- **`WinDV-x.y.z-x64-portable.zip`** needs no installing. Right-click the zip, choose
+  *Extract All...*, then run `WinDV.exe` in the extracted folder. (The `app` folder next
+  to it holds the rest of the program and must stay there.)
+
+The `x86` files are only for 32-bit Windows.
+
+The downloads are not code-signed, so Windows may show *"Windows protected your PC"*
+the first time. Click **More info**, then **Run anyway**.
 
 ## Thanks
 
@@ -71,11 +86,30 @@ project the solution maps `Win32` to `x86`.) Output:
 | Engine DLL used by it | `<Platform>\<Configuration>\WinDV.Native.dll`, copied next to the app |
 | Original MFC app | `<Platform>\<Configuration>\WinDV.exe` |
 | Tests | `<Platform>\<Configuration>\WinDV.Tests.exe` |
+| Portable-zip launcher | `<Platform>\<Configuration>\WinDVLauncher.exe` |
 
 The C++ code is warning-free at `/W4` and the C# at the default level; both treat
 warnings as errors. Everything links the CRT statically, and the WinUI app is
 self-contained (.NET and the Windows App SDK runtime are in its folder), so neither
 app needs anything installed.
+
+### Packaging a release
+
+After a Release build of a platform, [`build/package.ps1`](build/package.ps1) writes the
+two downloads to `dist\`. The installer needs Inno Setup 6
+(`winget install JRSoftware.InnoSetup`), and `-NoInstaller` builds only the zip.
+
+```powershell
+build\package.ps1 -Arch x64      # or x86 (after a Win32 build)
+```
+
+- `WinDV-<version>-<arch>-Setup.exe`: built from
+  [`installer/WinDV.iss`](installer/WinDV.iss).
+- `WinDV-<version>-<arch>-portable.zip`: the top level holds a small launcher
+  (`launcher/`, built as `WinDVLauncher.exe` and renamed `WinDV.exe`) and this README.
+  The launcher starts `app\WinDV.exe`, and the app's runtime stays in `app\`.
+
+CI runs the same script for both architectures.
 
 ## Tests
 
@@ -94,7 +128,7 @@ DV transport control on and off.
 
 ## Running
 
-`WinDV.exe` needs no installation. Connect a DV camcorder over FireWire, set it to
+Connect a DV camcorder over FireWire, set it to
 **VTR/VCR (tape) mode**, and it appears in the *Camcorder* list.
 
 In the WinUI app:
@@ -147,6 +181,9 @@ app/                         The original MFC application
   WinDV.rc, Resource.h       Resources; embeds WinDV.exe.manifest at ID 1
 core/                        WinDVCore: standard C++ logic with no MFC or DirectShow
 tests/                       WinDV.Tests: doctest unit tests for core/
+launcher/                    WinDVLauncher: the portable zip's WinDV.exe, starts app\WinDV.exe
+installer/                   Inno Setup script for the release installer
+build/package.ps1            Packages a built app: installer + portable zip (used by CI)
 external/baseclasses/        Vendored DirectShow base classes (MIT, Microsoft)
 external/doctest/            Vendored doctest 2.4.12 (MIT)
 legacy/                      Original VC6 WinDV.dsp/.dsw/.clw and a stale CppProperties.json,

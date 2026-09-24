@@ -20,11 +20,18 @@ Outputs: `<Platform>\<Configuration>\` holds the MFC `WinDV.exe`, `WinDV.Tests.e
 `ui\bin\<x64|x86>\<Configuration>\net10.0-windows10.0.26100.0\win-<x64|x86>\WinDV.exe`,
 with the DLL copied next to it. Build order: `baseclasses`, `WinDVCore` and `WinDVEngine`
 (static libs), then `WinDV`, `WinDV.Native` and `WinDV.Tests`, then `WinDV.UI`.
+`WinDVLauncher` (`launcher/`) has no dependencies.
+
+Release packaging is `build\package.ps1 -Arch x64|x86` (CI uses it too). It writes an Inno
+Setup installer (`installer/WinDV.iss`) and a portable zip to `dist\`. The zip's top level
+holds only `WinDVLauncher.exe` renamed to `WinDV.exe`, plus README. The app stays in
+`app\`, because it must sit next to its runtime DLLs. The installer's uninstall must never
+remove `HKCU\Software\Petr Mourek` (see Gotchas).
 
 Layout: one folder per project, with `.cpp` and `.h` side by side (no src/include split).
 The folders are `ui/` (WinDV.UI, C#), `native/` (WinDV.Native DLL), `engine/`
-(WinDVEngine), `app/` (MFC WinDV), `core/`, `tests/`, `external/` (vendored) and
-`legacy/` (VC6 files, not built). The vcxproj files reach the rest of the repo through
+(WinDVEngine), `app/` (MFC WinDV), `core/`, `tests/`, `launcher/` (the portable zip's
+stub exe), `installer/`, `build/`, `external/` (vendored) and `legacy/` (VC6 files, not built). The vcxproj files reach the rest of the repo through
 a `$(RepoRoot)` property, so use that rather than `$(ProjectDir)` or `$(SolutionDir)`
 for paths outside the project. `$(SolutionDir)` is wrong when a project is built on its
 own. `app/` and `native/` add `engine/` and `core/` to their include paths.
