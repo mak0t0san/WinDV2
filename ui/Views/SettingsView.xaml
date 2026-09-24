@@ -100,6 +100,17 @@
                         <ToggleSwitch x:Name="RecordPreviewSwitch" Header="Show the picture while recording" />
                     </StackPanel>
                 </Border>
+
+                <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,16,0,4" />
+                <Border Style="{StaticResource CardStyle}">
+                    <StackPanel Spacing="4">
+                        <ToggleSwitch x:Name="UpdateCheckSwitch" Header="Tell me when a new version is out"
+                                      OnContent="On" OffContent="Off" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Text="At most once a day, WinDV asks GitHub for the number of its latest version. Nothing about you or your videos is sent, and nothing is downloaded or installed without you." />
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 

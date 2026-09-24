@@ -92,7 +92,10 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
 
         bool firstRun = _settings.IsFirstRun;
         await ViewModel.StartAsync(commandLine);
-        if (firstRun && commandLine.Mode == CommandLineMode.Interactive)
+        if (commandLine.Mode != CommandLineMode.Interactive)
+            return; // a scripted capture or record: no notices
+        _ = ViewModel.CheckForUpdatesAsync();
+        if (firstRun)
             await ShowAboutAsync();
     }
 
@@ -333,6 +336,12 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     private void ErrorBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissError();
+
+    private void UpdateBar_Closed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        if (args.Reason == InfoBarCloseReason.CloseButton)
+            ViewModel.DismissUpdate();
+    }
 
     // ------------------------------------------------------------------ Settings and About
 

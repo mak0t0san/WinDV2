@@ -53,6 +53,7 @@ public sealed partial class SettingsView : UserControl
         PrefixBox.Text = settings.AVIPrefix;
         SuffixBox.Text = settings.AVISuffix;
         RecordPreviewSwitch.IsOn = settings.RecordPreview;
+        UpdateCheckSwitch.IsOn = settings.CheckForUpdates;
 
         ValidationText.Text = "";
         UpdateExample();
@@ -122,6 +123,7 @@ public sealed partial class SettingsView : UserControl
         _settings.AVIPrefix = PrefixBox.Text.Trim();
         _settings.AVISuffix = SuffixBox.Text.Trim();
         _settings.RecordPreview = RecordPreviewSwitch.IsOn;
+        _settings.CheckForUpdates = UpdateCheckSwitch.IsOn;
 
         Closed?.Invoke(this, new SettingsClosedEventArgs(saved: true));
     }

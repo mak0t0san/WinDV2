@@ -221,6 +221,15 @@
 
             <!-- Errors and status -->
             <StackPanel Grid.Row="4" Spacing="8">
+                <InfoBar Severity="Informational"
+                         Title="{x:Bind ViewModel.UpdateTitle, Mode=OneWay}"
+                         Message="Get it from the release page. Your settings carry over."
+                         IsOpen="{x:Bind ViewModel.HasUpdate, Mode=OneWay}"
+                         Closed="UpdateBar_Closed">
+                    <InfoBar.ActionButton>
+                        <HyperlinkButton Content="Download" NavigateUri="{x:Bind ViewModel.UpdateUri, Mode=OneWay}" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
                 <InfoBar Severity="{x:Bind ViewModel.ErrorSeverity, Mode=OneWay}"
                          Title="{x:Bind ViewModel.ErrorTitle, Mode=OneWay}"
                          Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"

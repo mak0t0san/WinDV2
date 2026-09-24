@@ -148,7 +148,10 @@ If a VS install is needed: `vs_installer.exe ... --passive` fails with **exit co
   a time; on failure it resets the pipeline and shows the first error (as the MFC
   `Guarded` does). Use `[ObservableProperty]` on **partial properties**, not fields:
   field-based ones trigger an AOT/WinRT warning, which is an error under
-  `TreatWarningsAsErrors`.
+  `TreatWarningsAsErrors`. `Services/UpdateChecker` is the app's only network access:
+  at most once a day it reads the latest release's `tag_name` from the GitHub API
+  (`JsonDocument`, since reflection-based JSON doesn't work under AOT). Its state lives
+  in the `Updates` registry subkey, which only the WinUI app uses.
 
 Filters derive from `CBaseFilter`, which inherits `IUnknown` twice, so they cannot go
 in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
