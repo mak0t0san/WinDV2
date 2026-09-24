@@ -23,4 +23,8 @@ std::wstring CaptureSearchPattern(std::wstring_view stem);
 // "stem.avi" and numbering only starts once that exists.
 std::wstring NextCaptureFilename(std::wstring_view stem, int ndigits, std::span<const std::wstring> existingNames);
 
+// Reduces a capture filename to its base: "D:\dv\tape.04-07-15.00.avi" gives
+// "D:\dv\tape". Only the file name part is cut, so dots in folders are kept.
+std::wstring CaptureBaseFromFilename(std::wstring_view file);
+
 } // namespace windv

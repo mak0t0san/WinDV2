@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="WinDV.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- The tape-deck look: round transport buttons, a big timecode. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="RecBrush" Color="#E5484D" />
+                    <SolidColorBrush x:Key="TransportActiveBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="RecBrush" Color="#D13438" />
+                    <SolidColorBrush x:Key="TransportActiveBrush" Color="{ThemeResource SystemAccentColorDark1}" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="RecBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="TransportActiveBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <FontFamily x:Key="IconFont">Segoe Fluent Icons,Segoe MDL2 Assets</FontFamily>
+
+            <Style x:Key="TransportButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Width" Value="52" />
+                <Setter Property="Height" Value="52" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="26" />
+                <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                <Setter Property="FontSize" Value="20" />
+            </Style>
+
+            <Style x:Key="TransportActiveButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="Width" Value="52" />
+                <Setter Property="Height" Value="52" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="26" />
+                <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                <Setter Property="FontSize" Value="20" />
+            </Style>
+
+            <Style x:Key="RecButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Height" Value="52" />
+                <Setter Property="MinWidth" Value="112" />
+                <Setter Property="Padding" Value="18,0" />
+                <Setter Property="CornerRadius" Value="26" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <Style x:Key="RecActiveButtonStyle" TargetType="Button" BasedOn="{StaticResource RecButtonStyle}">
+                <Setter Property="Background" Value="{ThemeResource RecBrush}" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="BorderBrush" Value="{ThemeResource RecBrush}" />
+            </Style>
+
+            <Style x:Key="CardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="16,12" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

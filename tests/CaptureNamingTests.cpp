@@ -22,6 +22,17 @@ TEST_CASE("Capture stem joins base and date")
 	CHECK(CaptureSearchPattern(L"C:\\dv\\tape") == L"C:\\dv\\tape*.avi");
 }
 
+TEST_CASE("Capture base strips the date, number and extension")
+{
+	CHECK(CaptureBaseFromFilename(L"D:\\dv\\tape.04-07-15.00.avi") == L"D:\\dv\\tape");
+	CHECK(CaptureBaseFromFilename(L"D:\\my.videos\\tape") == L"D:\\my.videos\\tape");
+	CHECK(CaptureBaseFromFilename(L"D:/my.videos/tape.avi") == L"D:/my.videos/tape");
+	CHECK(CaptureBaseFromFilename(L"C:tape.avi") == L"C:tape");
+	CHECK(CaptureBaseFromFilename(L"tape") == L"tape");
+	CHECK(CaptureBaseFromFilename(L".avi").empty());
+	CHECK(CaptureBaseFromFilename(L"").empty());
+}
+
 TEST_CASE("Numbered captures start at zero with the requested width")
 {
 	CHECK(Next(L"C:\\dv\\tape", 2) == L"C:\\dv\\tape.00.avi");

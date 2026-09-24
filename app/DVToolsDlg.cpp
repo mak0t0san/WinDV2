@@ -5,6 +5,7 @@
 #include "DVToolsDlg.h"
 
 #include "CaptureCfg.h"
+#include "CaptureNaming.h"
 #include "CommandLine.h"
 #include "RecordCfg.h"
 #include "VideoDeviceSel.h"
@@ -126,10 +127,7 @@ constexpr std::array kCtrlProperties{
 // "D:\dv\tape". Only the file name part is cut, so dots in folders are kept.
 bool CaptureFilenameExtractBase(CString& file)
 {
-	const int separator = (std::max)({file.ReverseFind(L'\\'), file.ReverseFind(L'/'), file.ReverseFind(L':')});
-	const int dot = file.Find(L'.', separator + 1);
-	if (dot >= 0)
-		file.Truncate(dot);
+	file = windv::CaptureBaseFromFilename(file.GetString()).c_str();
 	return !file.IsEmpty();
 }
 
@@ -365,8 +363,8 @@ bool CDVToolsDlg::RunCommandLine()
 		const CString file = commandLine->captureFile.c_str();
 		Guarded([&] {
 			m_FDST.SetWindowText(file);
-			m_video.BuildCapturing(m_VSRCname);
-			m_video.StartCapturing(file, m_DTFormat, m_nSuffixDigits, commandLine->duration);
+			m_video.BuildCapturing(m_VSRCname.GetString());
+			m_video.StartCapturing(file.GetString(), m_DTFormat.GetString(), m_nSuffixDigits, commandLine->duration);
 			StartStatusTimer();
 		});
 		break;
@@ -384,7 +382,7 @@ bool CDVToolsDlg::RunCommandLine()
 		}
 		Guarded([&] {
 			m_FSRC.SetWindowText(files);
-			m_video.BuildRecording(RecordFileList(files), m_VDSTname);
+			m_video.BuildRecording(RecordFileList(files).GetString(), m_VDSTname.GetString());
 			m_video.StartRecording();
 			StartStatusTimer();
 		});
@@ -402,9 +400,9 @@ void CDVToolsDlg::Guarded(Action&& action)
 		action();
 		return;
 	} catch (const DShowError& e) {
-		error = e.Message();
+		error = e.Message().c_str();
 	} catch (const std::exception& e) {
-		error = e.what();
+		error = Widen(e.what()).c_str();
 	} catch (CException* e) {
 		e->GetErrorMessage(error.GetBuffer(512), 512);
 		error.ReleaseBuffer();
@@ -563,9 +561,10 @@ bool CDVToolsDlg::SelectDevice(CString& deviceName, CStatic& label)
 {
 	std::vector<CString> devices;
 	try {
-		devices = GetVideoDeviceList();
+		for (const std::wstring& device : GetVideoDeviceList())
+			devices.emplace_back(device.c_str());
 	} catch (const DShowError& e) {
-		ShowError(e.Message());
+		ShowError(e.Message().c_str());
 		return false;
 	}
 	if (devices.empty()) {
@@ -612,12 +611,12 @@ void CDVToolsDlg::InitVideo()
 
 	if (CurrentTab() == TabCapture) {
 		try {
-			m_video.BuildCapturing(m_VSRCname);
+			m_video.BuildCapturing(m_VSRCname.GetString());
 			StartStatusTimer();
 		} catch (const DShowError& e) {
-			ShowError(e.Message());
+			ShowError(e.Message().c_str());
 		} catch (const std::exception& e) {
-			ShowError(CString(e.what()));
+			ShowError(Widen(e.what()).c_str());
 		}
 	} else {
 		m_video.Destroy();
@@ -646,7 +645,7 @@ void CDVToolsDlg::OnCapture()
 		Guarded([&] {
 			CString filename;
 			m_FDST.GetWindowText(filename);
-			m_video.StartCapturing(filename, m_DTFormat, m_nSuffixDigits);
+			m_video.StartCapturing(filename.GetString(), m_DTFormat.GetString(), m_nSuffixDigits);
 		});
 		break;
 	case CDV::Capturing:
@@ -671,7 +670,7 @@ void CDVToolsDlg::OnRecord()
 		Guarded([&] {
 			CString filename;
 			m_FSRC.GetWindowText(filename);
-			m_video.BuildRecording(RecordFileList(filename), m_VDSTname);
+			m_video.BuildRecording(RecordFileList(filename).GetString(), m_VDSTname.GetString());
 			StartStatusTimer();
 		});
 		break;
@@ -799,7 +798,7 @@ LRESULT CDVToolsDlg::OnDVTimeChange(WPARAM, LPARAM)
 
 LRESULT CDVToolsDlg::OnDVError(WPARAM, LPARAM)
 {
-	const CString error = m_video.TakeError();
+	const CString error = m_video.TakeError().c_str();
 	if (!error.IsEmpty()) {
 		InitVideo();
 		ShowError(error);

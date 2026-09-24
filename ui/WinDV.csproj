@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WinDV's WinUI 3 front end. The DirectShow engine is native C++
+       (WinDV.Native.dll, see native\windv_api.h); this project is only the UI.
+       Unpackaged and self-contained: the output folder runs as is, with no
+       Windows App Runtime or .NET install needed. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>WinDV</RootNamespace>
+    <AssemblyName>WinDV</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\WinDV.ico</ApplicationIcon>
+    <Platforms>x86;x64</Platforms>
+    <!-- Both, so one restore serves every platform build. -->
+    <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
+    <RuntimeIdentifier>win-$(Platform)</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Version>2.0.0</Version>
+    <Product>WinDV</Product>
+    <Copyright>Petr Mourek 2002-2003; modernized 2026</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <RepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepoRoot>
+    <!-- The C++ projects call 32-bit Windows "Win32". -->
+    <NativePlatform Condition="'$(Platform)'=='x86'">Win32</NativePlatform>
+    <NativePlatform Condition="'$(Platform)'!='x86'">$(Platform)</NativePlatform>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <!-- Build the engine DLL for the same platform and ship it next to WinDV.exe. -->
+  <ItemGroup>
+    <ProjectReference Include="..\native\WinDV.Native.vcxproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      SetPlatform="Platform=$(NativePlatform)"
+                      SetConfiguration="Configuration=$(Configuration)" />
+    <None Include="$(RepoRoot)$(NativePlatform)\$(Configuration)\WinDV.Native.dll"
+          Link="WinDV.Native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\WinDV.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+</Project>

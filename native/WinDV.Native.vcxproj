@@ -20,21 +20,20 @@
   </ItemGroup>
 
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{7C3A9E14-52B8-4D06-8F27-3A1B5C9D2E10}</ProjectGuid>
-    <RootNamespace>WinDV</RootNamespace>
-    <Keyword>MFCProj</Keyword>
+    <ProjectGuid>{9A41E6C3-2F58-4B7D-8E15-6C0D3B92A7F4}</ProjectGuid>
+    <RootNamespace>WinDVNative</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
 
+  <!-- The engine as a DLL with a flat C API (windv_api.h) for the WinUI app.
+       Static CRT, so it needs no redistributable. -->
   <PropertyGroup Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <PlatformToolset>v145</PlatformToolset>
-    <!-- Static MFC keeps the .exe self-contained so it runs without the MFC
-         redistributable. -->
     <CharacterSet>Unicode</CharacterSet>
-    <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -50,15 +49,10 @@
   </ImportGroup>
 
   <PropertyGroup>
-    <!-- The project lives in app\; outputs stay at the repository root so
-         WinDV.exe and WinDV.Tests.exe land side by side in <Platform>\<Configuration>\. -->
     <RepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepoRoot>
     <OutDir>$(RepoRoot)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\obj\</IntDir>
-    <TargetName>WinDV</TargetName>
-    <!-- WinDV.rc already embeds WinDV.exe.manifest as resource ID 1, which is
-         the ID the linker's generated manifest would use. Keep the original. -->
-    <GenerateManifest>false</GenerateManifest>
+    <TargetName>WinDV.Native</TargetName>
     <BaseClassesDir>$(RepoRoot)external\baseclasses\</BaseClassesDir>
   </PropertyGroup>
 
@@ -66,32 +60,22 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;_WIN32_DCOM;_WIN32_WINNT=0x0A00;WINVER=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;WINDV_NATIVE_EXPORTS;_WIN32_DCOM;_WIN32_WINNT=0x0A00;WINVER=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(BaseClassesDir);$(RepoRoot)core;$(RepoRoot)engine;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
-      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
-      <!-- /permissive- is off because the vendored <streams.h> does not compile
-           under it (qualified member names, CAggDirectDraw's destructor). The
-           individual conformance switches below cover most of the same ground. -->
+      <PrecompiledHeaderFile>DShowBase.h</PrecompiledHeaderFile>
+      <!-- No /permissive-: the engine headers include the vendored <streams.h>. -->
       <ConformanceMode>false</ConformanceMode>
       <AdditionalOptions>/Zc:__cplusplus /Zc:strictStrings /Zc:rvalueCast /Zc:ternary /Zc:inline /Zc:referenceBinding %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <SDLCheck>true</SDLCheck>
       <ControlFlowGuard>Guard</ControlFlowGuard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <MinimalRebuild>false</MinimalRebuild>
     </ClCompile>
-    <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <Culture>0x0409</Culture>
-    </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <!-- largeint.lib and olepro32.lib no longer ship in the Windows SDK; the
-           functionality they provided is in the CRT / oleaut32 now. -->
-      <AdditionalDependencies>winmm.lib;kernel32.lib;advapi32.lib;version.lib;user32.lib;gdi32.lib;comctl32.lib;ole32.lib;oleaut32.lib;uuid.lib;shell32.lib;strmiids.lib;quartz.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(BaseClassesDir)$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile>WinDV.Native.def</ModuleDefinitionFile>
+      <AdditionalDependencies>winmm.lib;kernel32.lib;advapi32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;uuid.lib;strmiids.lib;quartz.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -103,9 +87,6 @@
       <Optimization>Disabled</Optimization>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
-    <ResourceCompile>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
@@ -115,47 +96,25 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
     </ClCompile>
-    <ResourceCompile>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ResourceCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
   </ItemDefinitionGroup>
 
   <ItemGroup>
-    <ClCompile Include="StdAfx.cpp">
+    <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="CaptureCfg.cpp" />
-    <ClCompile Include="DropFilesEdit.cpp" />
-    <ClCompile Include="DVToolsDlg.cpp" />
-    <ClCompile Include="DVView.cpp" />
-    <ClCompile Include="RecordCfg.cpp" />
-    <ClCompile Include="ToolTab.cpp" />
-    <ClCompile Include="VideoDeviceSel.cpp" />
-    <ClCompile Include="WinDV.cpp" />
+    <ClCompile Include="EngineThread.cpp" />
+    <ClCompile Include="NativeApi.cpp" />
   </ItemGroup>
-
   <ItemGroup>
-    <ClInclude Include="CaptureCfg.h" />
-    <ClInclude Include="DropFilesEdit.h" />
-    <ClInclude Include="DVToolsDlg.h" />
-    <ClInclude Include="DVView.h" />
-    <ClInclude Include="RecordCfg.h" />
-    <ClInclude Include="Resource.h" />
-    <ClInclude Include="StdAfx.h" />
-    <ClInclude Include="ToolTab.h" />
-    <ClInclude Include="VideoDeviceSel.h" />
-    <ClInclude Include="WinDV.h" />
+    <ClInclude Include="EngineThread.h" />
+    <ClInclude Include="windv_api.h" />
   </ItemGroup>
-
   <ItemGroup>
-    <ResourceCompile Include="WinDV.rc" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="WinDV.exe.manifest" />
-    <None Include="res\WinDV.rc2" />
-    <Image Include="res\WinDV.ico" />
-    <Image Include="res\WinDVlogo.ico" />
+    <None Include="WinDV.Native.def" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,7 +1,7 @@
 // DVToolsDlg.h : main dialog - capture / record tabs, status, command line
 #pragma once
 
-#include "DShow.h"
+#include "DVView.h"
 #include "DropFilesEdit.h"
 #include "ToolTab.h"
 

@@ -1,0 +1,21 @@
+; Undecorated export names, so P/Invoke finds the stdcall functions on x86 too.
+EXPORTS
+	windv_create
+	windv_destroy
+	windv_list_devices
+	windv_preview_move
+	windv_set_options
+	windv_get_status
+	windv_take_error
+	windv_reset
+	windv_build_capture
+	windv_capture_start
+	windv_capture_stop
+	windv_transport
+	windv_build_record
+	windv_record_start
+	windv_record_stop
+	windv_parse_command_line
+	windv_capture_base
+	windv_is_valid_time_format
+	windv_format_now

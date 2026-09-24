@@ -93,4 +93,12 @@ std::wstring NextCaptureFilename(std::wstring_view stem, int ndigits, std::span<
 	return std::wstring(stem) + number + std::wstring(kExtension);
 }
 
+std::wstring CaptureBaseFromFilename(std::wstring_view file)
+{
+	const std::size_t separator = file.find_last_of(L"\\/:");
+	const std::size_t nameStart = separator == std::wstring_view::npos ? 0 : separator + 1;
+	const std::size_t dot = file.find(L'.', nameStart);
+	return std::wstring(dot == std::wstring_view::npos ? file : file.substr(0, dot));
+}
+
 } // namespace windv

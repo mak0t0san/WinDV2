@@ -96,6 +96,7 @@
     <ClCompile Include="DVTimecodeTests.cpp" />
     <ClCompile Include="FrameQueueTests.cpp" />
     <ClCompile Include="TimeFormatTests.cpp" />
+    <ClCompile Include="TransportLogicTests.cpp" />
   </ItemGroup>
 
   <ItemGroup>

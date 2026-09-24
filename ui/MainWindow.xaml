@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="WinDV.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:WinDV"
+    xmlns:views="using:WinDV.Views"
+    xmlns:vm="using:WinDV.ViewModels"
+    Title="WinDV">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Title bar (the content extends into it) -->
+        <Grid x:Name="AppTitleBar" Padding="16,0,140,0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image Source="ms-appx:///Assets/WinDV.ico" Width="18" Height="18" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="WinDV" VerticalAlignment="Center"
+                       Style="{StaticResource CaptionTextBlockStyle}" />
+        </Grid>
+
+        <!-- Main view -->
+        <Grid x:Name="MainView" Grid.Row="1" Padding="20,0,20,16" RowSpacing="12"
+              Visibility="{x:Bind local:Ui.Show(IsMainViewVisible), Mode=OneWay}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Mode switch and window-level actions -->
+            <Grid>
+                <SelectorBar x:Name="ToolSelector" SelectionChanged="ToolSelector_SelectionChanged">
+                    <SelectorBarItem x:Name="CaptureItem" Text="Capture from tape">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE714;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="RecordItem" Text="Record to tape">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE898;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                </SelectorBar>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                    <Button Style="{StaticResource SubtleButtonStyle}" Click="Settings_Click" AutomationProperties.Name="Settings"
+                            ToolTipService.ToolTip="Settings">
+                        <FontIcon Glyph="&#xE713;" FontSize="16" />
+                    </Button>
+                    <Button Style="{StaticResource SubtleButtonStyle}" Click="About_Click" AutomationProperties.Name="About WinDV"
+                            ToolTipService.ToolTip="About WinDV">
+                        <FontIcon Glyph="&#xE946;" FontSize="16" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Preview. The picture is a native child window placed over this
+                 border (see MainWindow.UpdatePreview); XAML can't draw on top of it. -->
+            <Border x:Name="PreviewHost" Grid.Row="1" Background="Black" CornerRadius="8"
+                    MinHeight="200" SizeChanged="PreviewHost_SizeChanged" />
+            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                        IsHitTestVisible="False"
+                        Visibility="{x:Bind local:Ui.Show(ViewModel.ShowsPlaceholder), Mode=OneWay}">
+                <FontIcon Glyph="&#xE714;" FontSize="40" Foreground="#80FFFFFF" />
+                <TextBlock Text="No picture" Foreground="#B0FFFFFF" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <!-- Transport -->
+            <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="170" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" MinWidth="130" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind ViewModel.Timecode, Mode=OneWay}"
+                                   FontFamily="Cascadia Mono,Consolas" FontSize="30" FontWeight="SemiBold"
+                                   AutomationProperties.Name="Position" />
+                        <TextBlock Text="{x:Bind ViewModel.RecordedAt, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   ToolTipService.ToolTip="When this scene was recorded (from the tape)" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Content="&#xEB9E;" Command="{x:Bind ViewModel.RewindCommand}"
+                                Style="{x:Bind local:Ui.TransportStyle(ViewModel.IsWinding), Mode=OneWay}"
+                                ToolTipService.ToolTip="Rewind (Ctrl+Left)" AutomationProperties.Name="Rewind">
+                            <Button.KeyboardAccelerators>
+                                <KeyboardAccelerator Modifiers="Control" Key="Left" />
+                            </Button.KeyboardAccelerators>
+                        </Button>
+                        <Button Content="&#xE768;" Command="{x:Bind ViewModel.PlayCommand}"
+                                Style="{x:Bind local:Ui.TransportStyle(ViewModel.IsPlaying), Mode=OneWay}"
+                                ToolTipService.ToolTip="Play (Ctrl+Space)" AutomationProperties.Name="Play">
+                            <Button.KeyboardAccelerators>
+                                <KeyboardAccelerator Modifiers="Control" Key="Space" />
+                            </Button.KeyboardAccelerators>
+                        </Button>
+                        <Button Content="&#xE769;" Command="{x:Bind ViewModel.PauseCommand}"
+                                Style="{x:Bind local:Ui.TransportStyle(ViewModel.IsPaused), Mode=OneWay}"
+                                ToolTipService.ToolTip="Pause (Ctrl+P)" AutomationProperties.Name="Pause">
+                            <Button.KeyboardAccelerators>
+                                <KeyboardAccelerator Modifiers="Control" Key="P" />
+                            </Button.KeyboardAccelerators>
+                        </Button>
+                        <Button Content="&#xE71A;" Command="{x:Bind ViewModel.StopCommand}"
+                                Style="{StaticResource TransportButtonStyle}"
+                                ToolTipService.ToolTip="Stop (Esc)" AutomationProperties.Name="Stop">
+                            <Button.KeyboardAccelerators>
+                                <KeyboardAccelerator Key="Escape" />
+                            </Button.KeyboardAccelerators>
+                        </Button>
+                        <Button Content="&#xEB9D;" Command="{x:Bind ViewModel.FastForwardCommand}"
+                                Style="{x:Bind local:Ui.TransportStyle(ViewModel.IsWinding), Mode=OneWay}"
+                                ToolTipService.ToolTip="Fast forward (Ctrl+Right)" AutomationProperties.Name="Fast forward">
+                            <Button.KeyboardAccelerators>
+                                <KeyboardAccelerator Modifiers="Control" Key="Right" />
+                            </Button.KeyboardAccelerators>
+                        </Button>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button Command="{x:Bind ViewModel.RecCommand}"
+                                Style="{x:Bind local:Ui.RecStyle(ViewModel.IsCapturing), Mode=OneWay}"
+                                Visibility="{x:Bind local:Ui.Show(ViewModel.IsCaptureTool), Mode=OneWay}"
+                                ToolTipService.ToolTip="Start / stop capturing to disk (Ctrl+R)"
+                                AutomationProperties.Name="Capture to disk">
+                            <Button.KeyboardAccelerators>
+                                <KeyboardAccelerator Modifiers="Control" Key="R" />
+                            </Button.KeyboardAccelerators>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Ellipse Width="14" Height="14" VerticalAlignment="Center"
+                                         Fill="{x:Bind local:Ui.RecDot(ViewModel.IsCapturing), Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind local:Ui.RecLabel(ViewModel.IsCapturing), Mode=OneWay}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right"
+                                    Visibility="{x:Bind local:Ui.Show(ViewModel.IsRecordingToTape), Mode=OneWay}">
+                            <Ellipse Width="12" Height="12" Fill="{ThemeResource RecBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="Recording to tape" VerticalAlignment="Center" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Source and destination -->
+            <Border Grid.Row="3" Style="{StaticResource CardStyle}" AllowDrop="True"
+                    DragOver="Files_DragOver" Drop="Files_Drop">
+                <Grid>
+                    <!-- Capture: camcorder -> files -->
+                    <Grid ColumnSpacing="12" RowSpacing="8"
+                          Visibility="{x:Bind local:Ui.Show(ViewModel.IsCaptureTool), Mode=OneWay}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Camcorder" VerticalAlignment="Center" />
+                        <ComboBox x:Name="CaptureDeviceBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{x:Bind ViewModel.Devices}"
+                                  SelectedItem="{x:Bind ViewModel.CaptureDevice, Mode=OneWay}"
+                                  SelectionChanged="CaptureDevice_SelectionChanged"
+                                  PlaceholderText="No DV device found" />
+                        <Button Grid.Column="2" Command="{x:Bind ViewModel.RefreshDevicesCommand}"
+                                ToolTipService.ToolTip="Look for devices again" AutomationProperties.Name="Refresh devices">
+                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        </Button>
+                        <TextBlock Grid.Row="1" Text="Save to" VerticalAlignment="Center" />
+                        <TextBox Grid.Row="1" Grid.Column="1"
+                                 Text="{x:Bind ViewModel.CaptureFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 PlaceholderText="Folder and name for captured files, e.g. D:\Video\Holiday" />
+                        <Button Grid.Row="1" Grid.Column="2" Content="Browse..." Click="BrowseCapture_Click" />
+                    </Grid>
+
+                    <!-- Record: files -> camcorder -->
+                    <Grid ColumnSpacing="12" RowSpacing="8"
+                          Visibility="{x:Bind local:Ui.Show(ViewModel.IsRecordTool), Mode=OneWay}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="AVI files" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{x:Bind ViewModel.RecordFiles, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 PlaceholderText="Drop DV AVI files here, or browse (separate several with |)" />
+                        <Button Grid.Column="2" Content="Browse..." Click="BrowseRecord_Click" />
+                        <TextBlock Grid.Row="1" Text="Camcorder" VerticalAlignment="Center" />
+                        <ComboBox x:Name="RecordDeviceBox" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{x:Bind ViewModel.Devices}"
+                                  SelectedItem="{x:Bind ViewModel.RecordDevice, Mode=OneWay}"
+                                  SelectionChanged="RecordDevice_SelectionChanged"
+                                  PlaceholderText="No DV device found" />
+                        <Button Grid.Row="1" Grid.Column="2" Command="{x:Bind ViewModel.RefreshDevicesCommand}"
+                                ToolTipService.ToolTip="Look for devices again" AutomationProperties.Name="Refresh devices">
+                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- Errors and status -->
+            <StackPanel Grid.Row="4" Spacing="8">
+                <InfoBar Severity="Error" Title="Something went wrong"
+                         Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                         IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                         Closed="ErrorBar_Closed" />
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" Width="16" Height="16" />
+                        <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.DroppedText, Mode=OneWay}"
+                               Foreground="{ThemeResource SystemFillColorCautionBrush}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                Visibility="{x:Bind local:Ui.Show(ViewModel.IsQueueVisible), Mode=OneWay}"
+                                ToolTipService.ToolTip="Frames waiting between the source and the destination">
+                        <TextBlock Text="Buffer" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <ProgressBar Width="80" Maximum="100" Value="{x:Bind ViewModel.QueueFill, Mode=OneWay}"
+                                     VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                Visibility="{x:Bind local:Ui.ShowText(ViewModel.DeckText), Mode=OneWay}">
+                        <FontIcon Glyph="&#xE7F4;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.DeckText, Mode=OneWay}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Grid>
+
+        <!-- Settings replace the main view; the preview is hidden meanwhile. -->
+        <views:SettingsView x:Name="SettingsPanel" Grid.Row="1"
+                            Visibility="{x:Bind local:Ui.Show(IsSettingsVisible), Mode=OneWay}"
+                            Closed="SettingsPanel_Closed" />
+    </Grid>
+</Window>

@@ -12,8 +12,17 @@ Original program by Petr Mourek (2002–2003), <http://windv.mourek.cz>.
 
 This repository is that 1.2.3 source, modernized: it builds with Visual Studio 2026 as
 a Unicode C++20 application for both x86 and x64, and a number of long-standing bugs
-are fixed (see [Changes from the original](#changes-from-the-original)). Behaviour,
-file naming and registry settings are unchanged.
+are fixed (see [Changes from the original](#changes-from-the-original)). File naming
+and registry settings are unchanged.
+
+There are two front ends over the same DirectShow engine:
+
+- **The new WinUI 3 app** (`ui/`, C#). It has a Windows 11 look (Mica, Fluent controls,
+  light and dark themes) and VCR-style transport controls: Rewind, Play, Pause, Stop,
+  Fast-forward, plus a separate red **REC** button that writes AVI files while the tape
+  runs.
+- **The original MFC dialog** (`app/`). It is kept, with its behaviour unchanged, until the
+  new app has been tested with a camcorder.
 
 ## Requirements
 
@@ -23,6 +32,9 @@ file naming and registry settings are unchanged.
   - **C++ MFC for latest v145 build tools (x86 & x64)**. This one is easy to miss and
     is not part of the default C++ workload. Without it the build fails at `afxwin.h`.
   - Windows 11 SDK (10.0.26100 or similar)
+  - *.NET desktop development* or just the **.NET 10 SDK**, for the WinUI app. The
+    Windows App SDK comes from NuGet at restore time, so the first build needs network
+    access.
 
 No DirectX SDK is required. The DirectShow base classes are vendored in this repo;
 see [`external/baseclasses/`](external/baseclasses/).
@@ -33,21 +45,30 @@ Open [`WinDV.sln`](WinDV.sln) in Visual Studio and build, or from a shell:
 
 ```powershell
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" `
-  WinDV.sln /p:Configuration=Release /p:Platform=x64
+  WinDV.sln /restore /p:Configuration=Release /p:Platform=x64
 ```
 
-`Platform` is `Win32` or `x64`; `Configuration` is `Debug` or `Release`. Output goes to
-`<Platform>\<Configuration>\`, e.g. `x64\Release\WinDV.exe`.
+`Platform` is `Win32` or `x64`; `Configuration` is `Debug` or `Release`. (For the C#
+project the solution maps `Win32` to `x86`.) Output:
 
-The build is warning-free at `/W4` and treats warnings as errors. The executable links
-MFC and the CRT statically, so it runs on a clean machine with no redistributable
-installed; its only dependencies are stock OS DLLs.
+| What | Where |
+| --- | --- |
+| New WinUI app (run this folder as is) | `ui\bin\<x64\|x86>\<Configuration>\net10.0-windows10.0.26100.0\win-<x64\|x86>\WinDV.exe` |
+| Engine DLL used by it | `<Platform>\<Configuration>\WinDV.Native.dll`, copied next to the app |
+| Original MFC app | `<Platform>\<Configuration>\WinDV.exe` |
+| Tests | `<Platform>\<Configuration>\WinDV.Tests.exe` |
+
+The C++ code is warning-free at `/W4` and the C# at the default level; both treat
+warnings as errors. Everything links the CRT statically, and the WinUI app is
+self-contained (.NET and the Windows App SDK runtime are in its folder), so neither
+app needs anything installed.
 
 ## Tests
 
 The solution also builds `WinDV.Tests.exe` next to `WinDV.exe`. It covers the logic
 that doesn't need a camcorder: DV timestamp decoding, capture file numbering,
-date/time format validation, command-line parsing, and the frame queue.
+date/time format validation, command-line parsing, the frame queue, and what each
+transport button asks the deck to do.
 
 ```powershell
 x64\Release\WinDV.Tests.exe
@@ -60,7 +81,18 @@ DV transport control on and off.
 ## Running
 
 `WinDV.exe` needs no installation. Connect a DV camcorder over FireWire, set it to
-**VTR/VCR (tape) mode**, and it appears in the *Video source* picker.
+**VTR/VCR (tape) mode**, and it appears in the *Camcorder* list.
+
+In the WinUI app:
+
+- **Capture from tape.** The transport buttons drive the camcorder, and the preview
+  follows the tape. Fast-forward and Rewind wind a stopped tape, and cue (search with a
+  picture) while it is playing or paused. **REC** starts and stops writing AVI files.
+  With *Let WinDV run the tape* turned on in Settings, REC also starts the tape.
+- **Record to tape.** Choose or drop AVI files, then press Play. Pause holds the current
+  frame on the output, and Stop ends the recording.
+- Keyboard: Ctrl+Space play, Ctrl+P pause, Esc stop, Ctrl+Left/Right rewind and
+  fast-forward, Ctrl+R REC.
 
 > **DirectShow DV capture is exclusive.** Only one process can hold the camcorder at a
 > time. If another copy of WinDV (or any other capture program) is already using the
@@ -84,17 +116,21 @@ capture or recording finishes. Quote paths that contain spaces.
 ## Repository layout
 
 ```
-WinDV.sln                    Solution: baseclasses, WinDVCore, WinDV, WinDV.Tests
-app/                         The WinDV application (one project, sources and headers together)
-  WinDV.vcxproj              Application project (Win32/x64, Unicode, static MFC, v145)
-  WinDV.cpp / WinDV.h        CWinApp entry point, file dialog helper
+WinDV.sln                    Solution: all projects below
+ui/                          WinDV.UI: the WinUI 3 app (C#, .NET 10, unpackaged, self-contained)
+  Interop/                   P/Invoke over windv_api.h, and the DVEngine wrapper
+  ViewModels/MainViewModel   Transport commands, status polling, pipeline lifecycle
+  Views/                     Settings screen, About dialog
+  Services/SettingsStore     Registry settings (shared with the MFC app)
+native/                      WinDV.Native: the engine as a DLL with a flat C API (windv_api.h)
+engine/                      WinDVEngine: the DirectShow engine (Win32 + ATL, no MFC)
+app/                         The original MFC application
   DVToolsDlg.cpp / .h        Main dialog: tabs, status, command-line handling
-  DShow.cpp / DShow.h        DirectShow layer (see below)
+  DVView.cpp / .h            CDV: the preview control, wrapping DVEngine
   CaptureCfg, RecordCfg      Settings pages
   VideoDeviceSel             Device picker dialog
   ToolTab, DropFilesEdit     UI helpers (tab control, drag-and-drop edit box)
   WinDV.rc, Resource.h       Resources; embeds WinDV.exe.manifest at ID 1
-  res/                       Icons
 core/                        WinDVCore: standard C++ logic with no MFC or DirectShow
 tests/                       WinDV.Tests: doctest unit tests for core/
 external/baseclasses/        Vendored DirectShow base classes (MIT, Microsoft)
@@ -106,9 +142,13 @@ legacy/                      Original VC6 WinDV.dsp/.dsw/.clw and a stale CppPro
 Each project folder keeps its `.cpp` and `.h` files side by side. Build output goes to
 `<Platform>\<Configuration>\` at the repository root for every project.
 
-### The DirectShow layer
+### The DirectShow engine
 
-`DShow.h` is built around two interfaces: `CFrameSource` produces DV frames and
+`engine/` has one file pair per piece: `FrameInterfaces.h`, `FilterGraph`,
+`InputGraph`, `OutputGraph`, `DVDevice` (enumeration, transport, camcorder in and out),
+`AviSource`, `AviWriter`, `Monitor` and `DVEngine` (the controller).
+
+It is built around two interfaces: `CFrameSource` produces DV frames and
 `CFrameHandler` consumes them. A `windv::FrameQueue` ring buffer sits between them so
 capture and disk I/O run on separate threads.
 
@@ -122,13 +162,23 @@ than letting the graph handle everything internally:
 | `CAVIReader`: one AVI file    | `CAVIWriter`: out to an AVI      |
 | `CAVIJoiner`: several AVIs    | `CMonitor`: on-screen preview    |
 
-`CDV` (a `CStatic` subclass) owns the pipeline, holds the state machine
-(`Idle`/`Capturing`/`Recording`/…), and runs the capture and record worker threads.
+`DVEngine` owns the pipeline, holds the state machine
+(`Idle`/`Capturing`/`Recording`/…), runs the capture and record worker threads, and
+sends deck transport commands (`DVTransport`; the button logic is in
+`core/TransportLogic`). It reports to a `DVEngineEvents` sink. The MFC app's `CDV`
+turns those events into window messages. `WinDV.Native` passes them to the C# app as
+callbacks.
+
+`WinDV.Native` runs the engine on a thread of its own in the COM multithreaded
+apartment and forwards every API call to it, because the WinUI UI thread is
+single-threaded. The preview is a plain Win32 child window that the C# app positions
+over a placeholder in the layout. XAML can't draw over it, so it is hidden while
+settings or dialogs are showing.
 
 Errors are thrown as `DShowError`, which carries the `HRESULT` and a message saying
-what failed. Errors on the UI thread are caught in `CDVToolsDlg`. Errors on worker
-threads are stored in `CDV` and posted to the dialog as `WM_DV_ERROR`. Either way they
-end up in the status bar.
+what failed. Errors on worker threads are stored in `DVEngine`, and the front end is
+notified. Each UI shows them in its own way: the MFC status bar, or an InfoBar in the
+WinUI app.
 
 ## Changes from the original
 
@@ -175,16 +225,18 @@ end up in the status bar.
 
 ### Unchanged on purpose
 
-- Registry settings live under the same key (`HKCU\Software\Petr Mourek\WinDV`) with the
-  same value names, so an existing configuration carries over. That includes the
-  historical misspelling `DiscontinuityTreshold`.
-- Capture file naming, the command-line syntax, and the dialog layout.
+- Registry settings live under the same key (`HKCU\Software\Petr Mourek\WinDV 1.2`,
+  named after the app title "WinDV 1.2") with the same value names, so an existing
+  configuration carries over. Both front ends share it. That includes the historical
+  misspelling `DiscontinuityTreshold`.
+- Capture file naming, the command-line syntax, and the MFC dialog layout.
 - The vendored DirectShow base classes. Only their project file changed, to add x64
   and switch to Unicode.
 
 ## Vendored dependencies
 
-`StdAfx.h` includes `<streams.h>`, the DirectShow base classes. These never shipped in
+The engine (`engine/DShowBase.h`) and the MFC app (`app/StdAfx.h`) include
+`<streams.h>`, the DirectShow base classes. These never shipped in
 the Windows SDK; they came from the DirectX SDK samples, which are long discontinued.
 (Confusingly, the Windows SDK *does* still ship a prebuilt `strmbase.lib`, just not its
 headers.)

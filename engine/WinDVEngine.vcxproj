@@ -20,16 +20,17 @@
   </ItemGroup>
 
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{3E8F6A21-9C47-4B5D-A1E3-7D2C9F0B4A61}</ProjectGuid>
-    <RootNamespace>WinDVCore</RootNamespace>
+    <ProjectGuid>{5D2B8F47-1C3E-4A6B-9D80-2E7F4C1A9B35}</ProjectGuid>
+    <RootNamespace>WinDVEngine</RootNamespace>
     <Keyword>Win32Proj</Keyword>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
 
-  <!-- Hardware-free logic shared by WinDV and WinDV.Tests. Standard C++ only:
-       no MFC, no DirectShow, so it can be unit tested. -->
+  <!-- The DirectShow engine: DV sources and sinks, the preview and the
+       capture / record state machine. Win32 + ATL + DirectShow base classes, no
+       MFC, so both the MFC app and WinDV.Native can link it. -->
   <PropertyGroup Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <PlatformToolset>v145</PlatformToolset>
@@ -49,6 +50,7 @@
   </ImportGroup>
 
   <PropertyGroup>
+    <RepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepoRoot>
     <OutDir>$(ProjectDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\obj\</IntDir>
   </PropertyGroup>
@@ -57,9 +59,14 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <PreprocessorDefinitions>WIN32;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <ConformanceMode>true</ConformanceMode>
+      <PreprocessorDefinitions>WIN32;_LIB;_WIN32_DCOM;_WIN32_WINNT=0x0A00;WINVER=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(RepoRoot)external\baseclasses;$(RepoRoot)core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>DShowBase.h</PrecompiledHeaderFile>
+      <!-- No /permissive-: the vendored <streams.h> does not compile under it.
+           Same individual conformance switches as WinDV. -->
+      <ConformanceMode>false</ConformanceMode>
+      <AdditionalOptions>/Zc:__cplusplus /Zc:strictStrings /Zc:rvalueCast /Zc:ternary /Zc:inline /Zc:referenceBinding %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <SDLCheck>true</SDLCheck>
       <ControlFlowGuard>Guard</ControlFlowGuard>
@@ -69,7 +76,8 @@
 
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- DEBUG must match baseclasses: it changes the layout of its classes. -->
+      <PreprocessorDefinitions>_DEBUG;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -86,20 +94,34 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
-    <ClCompile Include="CaptureNaming.cpp" />
-    <ClCompile Include="CommandLine.cpp" />
-    <ClCompile Include="DVTimecode.cpp" />
-    <ClCompile Include="FrameQueue.cpp" />
-    <ClCompile Include="TimeFormat.cpp" />
-    <ClCompile Include="TransportLogic.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="AviSource.cpp" />
+    <ClCompile Include="AviWriter.cpp" />
+    <ClCompile Include="DShowError.cpp" />
+    <ClCompile Include="DVDevice.cpp" />
+    <ClCompile Include="DVEngine.cpp" />
+    <ClCompile Include="FileFind.cpp" />
+    <ClCompile Include="FilterGraph.cpp" />
+    <ClCompile Include="InputGraph.cpp" />
+    <ClCompile Include="Monitor.cpp" />
+    <ClCompile Include="OutputGraph.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CaptureNaming.h" />
-    <ClInclude Include="CommandLine.h" />
-    <ClInclude Include="DVTimecode.h" />
-    <ClInclude Include="FrameQueue.h" />
-    <ClInclude Include="TimeFormat.h" />
-    <ClInclude Include="TransportLogic.h" />
+    <ClInclude Include="AviSource.h" />
+    <ClInclude Include="AviWriter.h" />
+    <ClInclude Include="ComApartment.h" />
+    <ClInclude Include="DShowBase.h" />
+    <ClInclude Include="DShowError.h" />
+    <ClInclude Include="DVDevice.h" />
+    <ClInclude Include="DVEngine.h" />
+    <ClInclude Include="FileFind.h" />
+    <ClInclude Include="FilterGraph.h" />
+    <ClInclude Include="FrameInterfaces.h" />
+    <ClInclude Include="InputGraph.h" />
+    <ClInclude Include="Monitor.h" />
+    <ClInclude Include="OutputGraph.h" />
   </ItemGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
