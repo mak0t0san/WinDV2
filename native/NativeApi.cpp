@@ -10,7 +10,7 @@
 #include "DVEngine.h"
 #include "EngineThread.h"
 #include "TimeFormat.h"
-
+extern "C" IMAGE_DOS_HEADER __ImageBase;
 namespace {
 
 constexpr wchar_t kPreviewClass[] = L"WinDVPreview";
