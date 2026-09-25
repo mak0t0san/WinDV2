@@ -5,8 +5,10 @@ namespace WinDV.Services;
 /// <summary>
 /// WinDV's settings. They live where the original MFC WinDV kept them
 /// (HKCU\Software\Petr Mourek\WinDV 1.2, from its "WinDV 1.2" app title), with
-/// the same value names, so both versions share one configuration. The names
-/// are a compatibility surface: keep them.
+/// the same value names, so both versions share one configuration, except
+/// DiscontinuityThreshold: WinDV 2 intentionally ignores the old misspelled
+/// DiscontinuityTreshold value once so it resets to the default. The names are
+/// a compatibility surface: keep them.
 /// </summary>
 public sealed class SettingsStore
 {
