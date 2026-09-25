@@ -70,7 +70,7 @@ FrameQueue::Frame FrameQueue::TakeLocked(std::unique_lock<std::mutex>& lock)
 void FrameQueue::Close()
 {
 	{
-		std::lock_guard lock(m_mutex);
+		std::scoped_lock lock(m_mutex);
 		m_closed = true;
 	}
 	m_notFull.notify_all();

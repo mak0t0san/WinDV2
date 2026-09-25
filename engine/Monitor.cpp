@@ -65,7 +65,7 @@ void CMonitor::Resize()
 void CMonitor::HandleFrame(REFERENCE_TIME /*duration*/, std::span<const BYTE> frame)
 {
 	{
-		std::lock_guard lock(m_mutex);
+		std::scoped_lock lock(m_mutex);
 		if (!m_sample || m_sampleFilled || frame.size() > static_cast<std::size_t>(m_sample->GetSize())) {
 			return;
 		}

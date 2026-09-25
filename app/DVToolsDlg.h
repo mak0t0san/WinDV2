@@ -20,7 +20,7 @@ protected:
 
 	afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
 	afx_msg void OnPaint();
-	afx_msg HCURSOR OnQueryDragIcon();
+	afx_msg HCURSOR OnQueryDragIcon() const;
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
 	afx_msg void OnSelchangeToolTab(NMHDR* pNMHDR, LRESULT* pResult);
@@ -57,7 +57,7 @@ private:
 	void Guarded(Action&& action);
 	bool RunCommandLine();
 	void LoadSettings();
-	void SaveSettings();
+	void SaveSettings() const;
 	CString RecordFileList(const CString& files) const;
 	bool SelectDevice(CString& deviceName, CStatic& label);
 

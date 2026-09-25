@@ -805,7 +805,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
         long now = Environment.TickCount64;
-        if (_lastDiskCheck is long last && now - last < DiskCheckInterval.TotalMilliseconds)
+        if (_lastDiskCheck is { } last && now - last < DiskCheckInterval.TotalMilliseconds)
         {
             return;
         }

@@ -302,7 +302,7 @@ void CDVToolsDlg::LoadSettings()
 	m_nSuffixDigits = std::clamp(static_cast<int>(app->GetProfileInt(L"Capture", L"SuffixDigits", 2)), 0, 4);
 }
 
-void CDVToolsDlg::SaveSettings()
+void CDVToolsDlg::SaveSettings() const
 {
 	CWinApp* app = AfxGetApp();
 
@@ -456,7 +456,7 @@ void CDVToolsDlg::OnPaint()
 	dc.DrawIcon(x, y, m_hIcon);
 }
 
-HCURSOR CDVToolsDlg::OnQueryDragIcon()
+HCURSOR CDVToolsDlg::OnQueryDragIcon() const
 {
 	return static_cast<HCURSOR>(m_hIcon);
 }
