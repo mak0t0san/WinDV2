@@ -27,7 +27,7 @@ void CCaptureCfg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_FEXAMPLE, m_fexample);
 	DDX_Control(pDX, IDC_DTFORMAT, m_dtformatctl);
 	DDX_Control(pDX, IDC_NDIGITS, m_ndigitsctl);
-	DDX_Text(pDX, IDC_DISCONTINUITY_TRESHOLD, m_discontinuityThreshold);
+	DDX_Text(pDX, IDC_DISCONTINUITY_THRESHOLD, m_discontinuityThreshold);
 	DDV_MinMaxUInt(pDX, m_discontinuityThreshold, 0, 1000000);
 	DDX_Text(pDX, IDC_EVERY_NTH, m_everyNth);
 	DDV_MinMaxUInt(pDX, m_everyNth, 1, 1000000);

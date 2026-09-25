@@ -41,7 +41,7 @@ EngineThread::EngineThread(std::function<void()> tick)
 	if (!m_wake) {
 		throw DShowError(L"Can't create the engine thread's event", HRESULT_FROM_WIN32(GetLastError()));
 	}
-	m_thread = std::jthread([this](std::stop_token stop) { Run(stop); });
+	m_thread = std::jthread([this](const std::stop_token& stop) { Run(stop); });
 }
 
 EngineThread::~EngineThread()
@@ -57,7 +57,7 @@ EngineThread::~EngineThread()
 void EngineThread::Post(std::function<void()> task)
 {
 	{
-		std::lock_guard lock(m_mutex);
+		std::scoped_lock lock(m_mutex);
 		m_tasks.push_back(std::move(task));
 	}
 	SetEvent(m_wake);
@@ -90,7 +90,7 @@ void EngineThread::Invoke(const std::function<void()>& task)
 
 std::function<void()> EngineThread::TakeTask()
 {
-	std::lock_guard lock(m_mutex);
+	std::scoped_lock lock(m_mutex);
 	if (m_tasks.empty()) {
 		return {};
 	}

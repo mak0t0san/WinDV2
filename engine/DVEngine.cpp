@@ -59,14 +59,14 @@ std::size_t DVEngine::GetQueueLoad() const
 
 std::wstring DVEngine::TakeError()
 {
-	std::lock_guard lock(m_mutex);
+	std::scoped_lock lock(m_mutex);
 	return std::exchange(m_error, {});
 }
 
 void DVEngine::ReportError(const std::wstring& message)
 {
 	{
-		std::lock_guard lock(m_mutex);
+		std::scoped_lock lock(m_mutex);
 		if (!m_error.empty()) {
 			return; // keep the first error; later ones are usually consequences
 		}
@@ -211,7 +211,7 @@ void DVEngine::StartCapturing(const std::wstring& filename, const std::wstring& 
 	}
 	m_stopReason = StopReason::None;
 	{
-		std::lock_guard lock(m_mutex);
+		std::scoped_lock lock(m_mutex);
 		m_target = {filename, dtformat, ndigits};
 	}
 	m_captureTime = captureTime;
@@ -342,7 +342,7 @@ void DVEngine::CaptureLoop()
 		const bool capturing = m_state == Capturing;
 		if (capturing && !wasCapturing) {
 			signal = windv::SignalWatch(std::chrono::seconds((std::max)(m_signalLossSeconds.load(), 0)));
-			std::lock_guard lock(m_mutex);
+			std::scoped_lock lock(m_mutex);
 			captureFile = m_target.filename;
 			framesSinceDiskCheck = kDiskCheckFrames; // check straight away
 		}
@@ -399,7 +399,7 @@ void DVEngine::CaptureLoop()
 			if (!m_aviWriter) {
 				CaptureTarget target;
 				{
-					std::lock_guard lock(m_mutex);
+					std::scoped_lock lock(m_mutex);
 					target = m_target;
 				}
 				m_aviWriter = std::make_unique<CAVIWriter>(target.filename, target.dtformat, target.ndigits, dvTime,

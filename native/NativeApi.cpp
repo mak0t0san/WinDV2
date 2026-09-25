@@ -10,9 +10,7 @@
 #include "DVEngine.h"
 #include "EngineThread.h"
 #include "TimeFormat.h"
-
 extern "C" IMAGE_DOS_HEADER __ImageBase;
-
 namespace {
 
 constexpr wchar_t kPreviewClass[] = L"WinDVPreview";
@@ -24,7 +22,7 @@ std::int32_t CopyOut(const std::wstring& text, wchar_t* buffer, std::int32_t len
 {
 	const auto needed = static_cast<std::int32_t>(text.size() + 1);
 	if (buffer && length >= needed) {
-		std::copy(text.c_str(), text.c_str() + needed, buffer);
+		std::copy_n(text.c_str(), needed, buffer);
 	}
 	return needed;
 }
@@ -68,14 +66,14 @@ struct windv_engine final : private DVEngineEvents {
 
 	void SetError(const std::wstring& message)
 	{
-		std::lock_guard lock(m_mutex);
+		std::scoped_lock lock(m_mutex);
 		m_callError = message;
 	}
 
 	std::wstring TakeError()
 	{
 		{
-			std::lock_guard lock(m_mutex);
+			std::scoped_lock lock(m_mutex);
 			if (!m_callError.empty()) {
 				return std::exchange(m_callError, {});
 			}
@@ -87,7 +85,7 @@ struct windv_engine final : private DVEngineEvents {
 	{
 		*status = {};
 		{
-			std::lock_guard lock(m_mutex);
+			std::scoped_lock lock(m_mutex);
 			*status = m_status;
 		}
 		if (m_engine) {
@@ -123,6 +121,7 @@ private:
 
 	void OnDVTimeChanged() override { Notify(WINDV_EVENT_DV_TIME_CHANGED); }
 	void OnError() override { Notify(WINDV_EVENT_ERROR); }
+
 	void Notify(windv_event event)
 	{
 		if (m_callback) {
@@ -199,7 +198,7 @@ void windv_engine::Tick()
 	status.queueLoad = static_cast<std::int32_t>(m_engine->GetQueueLoad());
 	status.queueCapacity = kQueueCapacity;
 	{
-		std::lock_guard lock(m_mutex);
+		std::scoped_lock lock(m_mutex);
 		m_status = status;
 	}
 

@@ -57,7 +57,7 @@ private:
 	void Guarded(Action&& action);
 	bool RunCommandLine();
 	void LoadSettings();
-	void SaveSettings();
+	void SaveSettings() const;
 	CString RecordFileList(const CString& files) const;
 	bool SelectDevice(CString& deviceName, CStatic& label);
 

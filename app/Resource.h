@@ -39,7 +39,7 @@
 #define IDC_VIDEO                       1025
 #define IDC_STATUS2                     1026
 #define IDC_STATUS3                     1027
-#define IDC_DISCONTINUITY_TRESHOLD      1048
+#define IDC_DISCONTINUITY_THRESHOLD     1048
 #define IDC_MAX_FRAMES                  1049
 #define IDC_EVERY_NTH                   1050
 #define IDC_TYPE_1                      1052
@@ -59,7 +59,7 @@
 #define IDC_DVCTRL                      1071
 
 // Next default values for new objects
-// 
+//
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        139

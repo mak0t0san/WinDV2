@@ -135,7 +135,7 @@ void CAVIJoiner::HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> fram
 void CAVIJoiner::EndOfStream()
 {
 	{
-		std::lock_guard lock(m_mutex);
+		std::scoped_lock lock(m_mutex);
 		m_readerEndedFlag = true;
 	}
 	m_readerEnded.notify_one();
