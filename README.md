@@ -311,8 +311,9 @@ names containing dots, and the switch away from the old Platform SDK.)
 
 - Registry settings live under the same key (`HKCU\Software\Petr Mourek\WinDV 1.2`,
   named after the app title "WinDV 1.2") with the same value names, so an existing
-  configuration carries over. Both front ends share it. That includes the historical
-  misspelling `DiscontinuityTreshold`.
+  configuration carries over. Both front ends share it. The one exception is
+  `DiscontinuityThreshold`, spelled `DiscontinuityTreshold` by WinDV 1.2.3, so that
+  setting is not carried over.
 - Capture file naming, the command-line syntax, and the MFC dialog layout.
 - The vendored DirectShow base classes. Only their project file changed, to add x64
   and switch to Unicode.

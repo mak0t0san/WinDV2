@@ -165,8 +165,8 @@ BEGIN
                     BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,9,16,67,10
     CONTROL         "type-2 AVI (vids+auds)",IDC_TYPE_2,"Button",
                     BS_AUTORADIOBUTTON,9,28,87,10
-    RTEXT           "Discontinuity treshold (sec.):",IDC_STATIC,86,8,89,8
-    EDITTEXT        IDC_DISCONTINUITY_TRESHOLD,179,7,40,12,ES_RIGHT | 
+    RTEXT           "Discontinuity threshold (sec.):",IDC_STATIC,86,8,89,8
+    EDITTEXT        IDC_DISCONTINUITY_THRESHOLD,179,7,40,12,ES_RIGHT | 
                     ES_AUTOHSCROLL | ES_NUMBER
     RTEXT           "Max AVI size (frames):",IDC_STATIC,105,23,70,8
     EDITTEXT        IDC_MAX_FRAMES,179,21,40,12,ES_RIGHT | ES_AUTOHSCROLL | 

@@ -6,7 +6,7 @@ namespace WinDV.Services;
 /// WinDV's settings. They live where the original MFC WinDV kept them
 /// (HKCU\Software\Petr Mourek\WinDV 1.2, from its "WinDV 1.2" app title), with
 /// the same value names, so both versions share one configuration. The names
-/// are a compatibility surface: keep them, including "DiscontinuityTreshold".
+/// are a compatibility surface: keep them.
 /// </summary>
 public sealed class SettingsStore
 {
@@ -61,45 +61,45 @@ public sealed class SettingsStore
 
     public static SettingsStore Load()
     {
-        var s = new SettingsStore();
+        var settings = new SettingsStore();
         using RegistryKey? root = Registry.CurrentUser.OpenSubKey(KeyPath);
         using RegistryKey? main = root?.OpenSubKey("MainWindow");
         using RegistryKey? capture = root?.OpenSubKey("Capture");
         using RegistryKey? record = root?.OpenSubKey("Record");
         using RegistryKey? updates = root?.OpenSubKey("Updates");
 
-        s.WindowX = GetInt(main, "X", 0);
-        s.WindowY = GetInt(main, "Y", 0);
-        s.WindowWidth = GetInt(main, "W", 0);
-        s.WindowHeight = GetInt(main, "H", 0);
-        s.DeckControl = GetInt(main, "DVControlEnabled", 0) > 0;
-        s.SelectedTool = Math.Clamp(GetInt(main, "SelectedTool", 0), 0, 1);
-        s.WorkingDirectory = GetString(main, "WorkingDirectory", ".");
+        settings.WindowX = GetInt(main, "X", 0);
+        settings.WindowY = GetInt(main, "Y", 0);
+        settings.WindowWidth = GetInt(main, "W", 0);
+        settings.WindowHeight = GetInt(main, "H", 0);
+        settings.DeckControl = GetInt(main, "DVControlEnabled", 0) > 0;
+        settings.SelectedTool = Math.Clamp(GetInt(main, "SelectedTool", 0), 0, 1);
+        settings.WorkingDirectory = GetString(main, "WorkingDirectory", ".");
 
-        s.CaptureDevice = GetString(capture, "DVDevice", DefaultDevice);
-        s.CaptureFile = GetString(capture, "File", "");
-        s.Type2Avi = GetInt(capture, "Type2AVI", 1) > 0;
-        s.DiscontinuityThreshold = Math.Max(0, GetInt(capture, "DiscontinuityTreshold", 1));
-        s.MaxAviFrames = Math.Max(10, GetInt(capture, "MaxAVIFrames", 25 * 60 * 15));
-        s.EveryNth = Math.Max(1, GetInt(capture, "EveryNth", 1));
-        s.DateTimeFormat = GetString(capture, "DateTimeFormat", "%y-%m-%d_%H-%M");
-        s.DateTimeFormatHistory = GetString(capture, "DateTimeFormatHistory", DefaultFormatHistory)
+        settings.CaptureDevice = GetString(capture, "DVDevice", DefaultDevice);
+        settings.CaptureFile = GetString(capture, "File", "");
+        settings.Type2Avi = GetInt(capture, "Type2AVI", 1) > 0;
+        settings.DiscontinuityThreshold = Math.Max(0, GetInt(capture, "DiscontinuityThreshold", 1));
+        settings.MaxAviFrames = Math.Max(10, GetInt(capture, "MaxAVIFrames", 25 * 60 * 15));
+        settings.EveryNth = Math.Max(1, GetInt(capture, "EveryNth", 1));
+        settings.DateTimeFormat = GetString(capture, "DateTimeFormat", "%y-%m-%d_%H-%M");
+        settings.DateTimeFormatHistory = GetString(capture, "DateTimeFormatHistory", DefaultFormatHistory)
             .Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
-        s.SuffixDigits = Math.Clamp(GetInt(capture, "SuffixDigits", 2), 0, 4);
+        settings.SuffixDigits = Math.Clamp(GetInt(capture, "SuffixDigits", 2), 0, 4);
         // New in WinDV 2; the original ignores it.
-        s.SignalLossSeconds = Math.Clamp(GetInt(capture, "StopOnSignalLoss", 0), 0, 3600);
+        settings.SignalLossSeconds = Math.Clamp(GetInt(capture, "StopOnSignalLoss", 0), 0, 3600);
 
-        s.RecordDevice = GetString(record, "DVDevice", DefaultDevice);
-        s.RecordFile = GetString(record, "File", "");
-        s.AviPrefix = GetString(record, "AVIPrefix", "");
-        s.AviSuffix = GetString(record, "AVISuffix", "");
-        s.RecordPreview = GetInt(record, "Preview", 1) > 0;
+        settings.RecordDevice = GetString(record, "DVDevice", DefaultDevice);
+        settings.RecordFile = GetString(record, "File", "");
+        settings.AviPrefix = GetString(record, "AVIPrefix", "");
+        settings.AviSuffix = GetString(record, "AVISuffix", "");
+        settings.RecordPreview = GetInt(record, "Preview", 1) > 0;
 
-        s.CheckForUpdates = GetInt(updates, "CheckForUpdates", 1) > 0;
-        s.LastUpdateCheck = updates?.GetValue("LastCheck") is long last ? last : 0;
-        s.LatestRelease = GetString(updates, "LatestRelease", "");
-        s.DismissedRelease = GetString(updates, "DismissedRelease", "");
-        return s;
+        settings.CheckForUpdates = GetInt(updates, "CheckForUpdates", 1) > 0;
+        settings.LastUpdateCheck = updates?.GetValue("LastCheck") is long last ? last : 0;
+        settings.LatestRelease = GetString(updates, "LatestRelease", "");
+        settings.DismissedRelease = GetString(updates, "DismissedRelease", "");
+        return settings;
     }
 
     public void Save()
@@ -120,7 +120,7 @@ public sealed class SettingsStore
             capture.SetValue("DVDevice", CaptureDevice, RegistryValueKind.String);
             capture.SetValue("File", CaptureFile, RegistryValueKind.String);
             SetInt(capture, "Type2AVI", Type2Avi ? 1 : 0);
-            SetInt(capture, "DiscontinuityTreshold", DiscontinuityThreshold);
+            SetInt(capture, "DiscontinuityThreshold", DiscontinuityThreshold);
             SetInt(capture, "MaxAVIFrames", MaxAviFrames);
             SetInt(capture, "EveryNth", EveryNth);
             capture.SetValue("DateTimeFormat", DateTimeFormat, RegistryValueKind.String);

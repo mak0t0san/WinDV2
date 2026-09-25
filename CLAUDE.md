@@ -264,8 +264,9 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
   camelCase locals/parameters. P/Invoke methods get PascalCase names plus
   `EntryPoint = "native_name"`. Renaming one without `EntryPoint` still builds, but fails
   at runtime. C++ naming keeps its MFC style (`m_`, `CClass`).
-- Registry value names are a compatibility surface. Keep them, including the
-  misspelled `DiscontinuityTreshold`.
+- Registry value names are a compatibility surface. Keep them. (`DiscontinuityThreshold`
+  was renamed from the original misspelling `DiscontinuityTreshold` on purpose, so
+  a saved threshold resets to the default once.)
 - `legacy/` holds the original VC6 `.dsp`/`.dsw`/`.clw` and `CppProperties.json` (a
   leftover from VS "Open Folder" mode that still declares the old MBCS/UNICODE defines).
   None of it is built, and its paths predate the `app/` move. `WinDV.sln` is

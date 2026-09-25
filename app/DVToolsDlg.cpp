@@ -286,10 +286,9 @@ void CDVToolsDlg::LoadSettings()
 	m_video.m_recordPreview = app->GetProfileInt(L"Record", L"Preview", m_video.m_recordPreview ? 1 : 0) > 0;
 
 	m_video.m_type2AVI = app->GetProfileInt(L"Capture", L"Type2AVI", m_video.m_type2AVI ? 1 : 0) > 0;
-	// "Treshold" is misspelt in the registry since WinDV 1.0; kept for compatibility.
 	m_video.m_discontinuityThreshold =
 	    (std::max)(0, static_cast<int>(
-	                      app->GetProfileInt(L"Capture", L"DiscontinuityTreshold", m_video.m_discontinuityThreshold)));
+	                      app->GetProfileInt(L"Capture", L"DiscontinuityThreshold", m_video.m_discontinuityThreshold)));
 	m_video.m_maxAVIFrames =
 	    (std::max)(10, static_cast<int>(app->GetProfileInt(L"Capture", L"MaxAVIFrames", m_video.m_maxAVIFrames)));
 	m_video.m_everyNth =
@@ -326,7 +325,7 @@ void CDVToolsDlg::SaveSettings() const
 	app->WriteProfileString(L"Capture", L"File", text);
 
 	app->WriteProfileInt(L"Capture", L"Type2AVI", m_video.m_type2AVI ? 1 : 0);
-	app->WriteProfileInt(L"Capture", L"DiscontinuityTreshold", m_video.m_discontinuityThreshold);
+	app->WriteProfileInt(L"Capture", L"DiscontinuityThreshold", m_video.m_discontinuityThreshold);
 	app->WriteProfileInt(L"Capture", L"MaxAVIFrames", m_video.m_maxAVIFrames);
 	app->WriteProfileInt(L"Capture", L"EveryNth", m_video.m_everyNth);
 	app->WriteProfileString(L"Capture", L"DateTimeFormat", m_DTFormat);
