@@ -455,7 +455,7 @@ void CDVToolsDlg::OnPaint()
 	dc.DrawIcon(x, y, m_hIcon);
 }
 
-HCURSOR CDVToolsDlg::OnQueryDragIcon() const
+HCURSOR CDVToolsDlg::OnQueryDragIcon()
 {
 	return static_cast<HCURSOR>(m_hIcon);
 }
