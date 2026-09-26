@@ -29,4 +29,8 @@ public static class Ui
 
     public static Brush SignalBrush(bool hasSignal) => (Brush)Application.Current.Resources[
         hasSignal ? "SystemFillColorSuccessBrush" : "SystemFillColorCautionBrush"];
+
+    public static string VolumeGlyph(bool muted) => muted ? "" : "";
+
+    public static string MuteButtonName(bool muted) => muted ? "Unmute" : "Mute";
 }

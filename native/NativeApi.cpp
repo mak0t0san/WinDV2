@@ -291,6 +291,8 @@ WINDV_API void WINDV_CALL windv_set_options(windv_handle engine, const windv_opt
 	e.m_recordPreview = options->recordPreview != 0;
 	e.m_DVctrl = options->deckFollowsPipeline != 0;
 	e.m_signalLossSeconds = (std::max)(0, options->signalLossSeconds);
+	e.m_previewVolume = std::clamp(options->previewVolume, 0, 100);
+	e.m_previewMuted = options->previewMuted != 0;
 }
 
 WINDV_API void WINDV_CALL windv_get_status(windv_handle engine, windv_status* status)

@@ -6,6 +6,8 @@
 #include "ComApartment.h"
 #include "DShowError.h"
 
+#include <cmath>
+
 namespace {
 
 void SetDVDecoding(IGraphBuilder* graph, bool fullResolution)
@@ -19,13 +21,33 @@ void SetDVDecoding(IGraphBuilder* graph, bool fullResolution)
 	}
 }
 
+// Maps a 0-100 volume percentage (and mute) to IBasicAudio's -10000..0
+// hundredths-of-a-decibel attenuation range.
+long VolumeToDb(int percent, bool mute)
+{
+	if (mute || percent <= 0) {
+		return -10000;
+	}
+	const double fraction = (std::min)(100, percent) / 100.0;
+	return (std::max)(-10000L, static_cast<long>(2000.0 * std::log10(fraction)));
+}
+
 } // namespace
 
 CMonitor::CMonitor(HWND hWnd, const CMediaType& type) : COutputGraph(type), m_hWnd(hWnd)
 {
 	CheckHR(m_FG.QueryInterface(&m_VW), L"Can't get IVideoWindow");
-	CheckSucceeded(m_GB->RenderStream(nullptr, nullptr, m_outputFilterRef, nullptr, nullptr),
-	               L"Can't build the preview (is a DV decoder installed?)");
+
+	CComPtr<IBaseFilter> splitter;
+	CheckHR(splitter.CoCreateInstance(CLSID_DVSplitter), L"Can't create the DV splitter");
+	CheckHR(m_FG->AddFilter(splitter, L"DV splitter"), L"Can't add the DV splitter");
+	CheckHR(m_GB->RenderStream(nullptr, &MEDIATYPE_Interleaved, m_outputFilterRef, nullptr, splitter),
+	        L"Can't connect the DV splitter");
+	CheckHR(m_GB->RenderStream(nullptr, &MEDIATYPE_Video, splitter, nullptr, nullptr),
+	        L"Can't build the preview (is a DV decoder installed?)");
+	if (SUCCEEDED(m_GB->RenderStream(nullptr, &MEDIATYPE_Audio, splitter, nullptr, nullptr))) {
+		m_FG.QueryInterface(&m_BA); // best-effort; audio stays optional like the picture
+	}
 	SetDVDecoding(m_FG, false);
 	m_VW->put_Owner(reinterpret_cast<OAHWND>(m_hWnd));
 	m_VW->put_WindowStyle(WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
@@ -60,6 +82,16 @@ void CMonitor::Resize()
 	const long w = (std::min)(cx, cy * 4 / 3);
 	const long h = (std::min)(cy, cx * 3 / 4);
 	m_VW->SetWindowPosition((cx - w) / 2, (cy - h) / 2, w, h);
+}
+
+void CMonitor::SetVolume(int volumePercent, bool mute)
+{
+	if (!m_BA || (volumePercent == m_appliedVolume && mute == m_appliedMute)) {
+		return;
+	}
+	m_appliedVolume = volumePercent;
+	m_appliedMute = mute;
+	m_BA->put_Volume(VolumeToDb(volumePercent, mute));
 }
 
 void CMonitor::HandleFrame(REFERENCE_TIME /*duration*/, std::span<const BYTE> frame)
