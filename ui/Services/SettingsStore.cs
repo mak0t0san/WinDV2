@@ -28,6 +28,9 @@ public sealed class SettingsStore
     /// <summary>0 = capture, 1 = record to tape.</summary>
     public int SelectedTool { get; set; }
     public string WorkingDirectory { get; set; } = ".";
+    /// <summary>The live preview's audio volume, 0-100.</summary>
+    public int PreviewVolume { get; set; } = 100;
+    public bool PreviewMuted { get; set; }
 
     // Capture
     public string CaptureDevice { get; set; } = DefaultDevice;
@@ -77,6 +80,8 @@ public sealed class SettingsStore
         settings.DeckControl = GetInt(main, "DVControlEnabled", 0) > 0;
         settings.SelectedTool = Math.Clamp(GetInt(main, "SelectedTool", 0), 0, 1);
         settings.WorkingDirectory = GetString(main, "WorkingDirectory", ".");
+        settings.PreviewVolume = Math.Clamp(GetInt(main, "PreviewVolume", 100), 0, 100);
+        settings.PreviewMuted = GetInt(main, "PreviewMuted", 0) > 0;
 
         settings.CaptureDevice = GetString(capture, "DVDevice", DefaultDevice);
         settings.CaptureFile = GetString(capture, "File", "");
@@ -116,6 +121,8 @@ public sealed class SettingsStore
             SetInt(main, "DVControlEnabled", DeckControl ? 1 : 0);
             SetInt(main, "SelectedTool", SelectedTool);
             main.SetValue("WorkingDirectory", WorkingDirectory, RegistryValueKind.String);
+            SetInt(main, "PreviewVolume", PreviewVolume);
+            SetInt(main, "PreviewMuted", PreviewMuted ? 1 : 0);
         }
         using (RegistryKey capture = root.CreateSubKey("Capture"))
         {

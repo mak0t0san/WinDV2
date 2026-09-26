@@ -31,7 +31,9 @@ public sealed record EngineOptions(
     int EveryNth,
     bool RecordPreview,
     bool DeckFollowsPipeline,
-    int SignalLossSeconds);
+    int SignalLossSeconds,
+    int PreviewVolume,
+    bool PreviewMuted);
 
 public sealed record ParsedCommandLine(CommandLineMode Mode, bool ExitOnFinish, long Duration, string Files);
 
@@ -213,6 +215,8 @@ public sealed unsafe class DvEngine : IDisposable
             RecordPreview = options.RecordPreview ? 1 : 0,
             DeckFollowsPipeline = options.DeckFollowsPipeline ? 1 : 0,
             SignalLossSeconds = options.SignalLossSeconds,
+            PreviewVolume = options.PreviewVolume,
+            PreviewMuted = options.PreviewMuted ? 1 : 0,
         };
         NativeMethods.SetOptions(_handle, in native);
     }

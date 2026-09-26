@@ -15,11 +15,18 @@ public:
 	void Resize();
 	void HandleFrame(REFERENCE_TIME duration, std::span<const BYTE> frame) override;
 
+	// Applies the preview's audio volume/mute; a no-op if no audio renderer
+	// connected. Cheap to call every frame: skips the COM call when unchanged.
+	void SetVolume(int volumePercent, bool mute);
+
 private:
 	void MonitoringThread(std::stop_token stop);
 
 	HWND m_hWnd;
 	CComPtr<IVideoWindow> m_VW;
+	CComPtr<IBasicAudio> m_BA; // null if no audio renderer connected
+	int m_appliedVolume = -1;
+	bool m_appliedMute = false;
 
 	std::mutex m_mutex;
 	std::condition_variable_any m_filled;

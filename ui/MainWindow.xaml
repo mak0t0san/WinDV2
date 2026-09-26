@@ -73,7 +73,9 @@
                 <TextBlock Text="No picture" Foreground="#B0FFFFFF" HorizontalAlignment="Center" />
             </StackPanel>
 
-            <!-- Transport -->
+            <!-- Transport. Volume/mute live here, not over the preview: that border
+                 is a native child HWND (see MainWindow.UpdatePreview) and XAML can't
+                 draw on top of it. -->
             <Border Grid.Row="2" Style="{StaticResource CardStyle}">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
@@ -239,24 +241,14 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
-                                Visibility="{x:Bind local:Ui.ShowText(ViewModel.SignalText), Mode=OneWay}"
-                                ToolTipService.ToolTip="Whether DV frames are arriving from the camcorder or files">
-                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                 Fill="{x:Bind local:Ui.SignalBrush(ViewModel.HasSignal), Mode=OneWay}" />
-                        <TextBlock Text="{x:Bind ViewModel.SignalText, Mode=OneWay}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" Width="16" Height="16" />
-                        <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+
+                    <!-- Status: everything about what the pipeline is doing right now. -->
+                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" Width="16" Height="16" />
+                            <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" VerticalAlignment="Center" />
+                        </StackPanel>
                         <TextBlock Text="{x:Bind ViewModel.DroppedText, Mode=OneWay}"
                                    Foreground="{ThemeResource SystemFillColorCautionBrush}" />
                         <StackPanel Orientation="Horizontal" Spacing="6"
@@ -267,28 +259,49 @@
                             <TextBlock Text="{x:Bind ViewModel.DiskText, Mode=OneWay}"
                                        Foreground="{x:Bind local:Ui.DiskBrush(ViewModel.IsDiskLow), Mode=OneWay}" />
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                    Visibility="{x:Bind local:Ui.Show(ViewModel.IsQueueVisible), Mode=OneWay}"
+                                    ToolTipService.ToolTip="Frames waiting between the source and the destination">
+                            <TextBlock Text="Buffer" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <ProgressBar Width="80" Maximum="100" Value="{x:Bind ViewModel.QueueFill, Mode=OneWay}"
+                                         VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                    Visibility="{x:Bind local:Ui.ShowText(ViewModel.DeckText), Mode=OneWay}">
+                            <FontIcon Glyph="&#xE7F4;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.DeckText, Mode=OneWay}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                    Visibility="{x:Bind local:Ui.ShowText(ViewModel.SignalText), Mode=OneWay}"
+                                    ToolTipService.ToolTip="Whether DV frames are arriving from the camcorder or files">
+                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                     Fill="{x:Bind local:Ui.SignalBrush(ViewModel.HasSignal), Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind ViewModel.SignalText, Mode=OneWay}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                    Visibility="{x:Bind local:Ui.Show(ViewModel.IsCapturing), Mode=OneWay}"
+                                    ToolTipService.ToolTip="Frames written to the current file. It resets and a new file starts once it reaches the &quot;Max frames per file&quot; setting.">
+                            <TextBlock Text="File" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <ProgressBar Width="80" Maximum="100" Value="{x:Bind ViewModel.FileFrameFill, Mode=OneWay}"
+                                         VerticalAlignment="Center" />
+                            <TextBlock Text="{x:Bind ViewModel.FileFrameText, Mode=OneWay}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
                     </StackPanel>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
-                                Visibility="{x:Bind local:Ui.Show(ViewModel.IsQueueVisible), Mode=OneWay}"
-                                ToolTipService.ToolTip="Frames waiting between the source and the destination">
-                        <TextBlock Text="Buffer" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <ProgressBar Width="80" Maximum="100" Value="{x:Bind ViewModel.QueueFill, Mode=OneWay}"
-                                     VerticalAlignment="Center" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
-                                Visibility="{x:Bind local:Ui.ShowText(ViewModel.DeckText), Mode=OneWay}">
-                        <FontIcon Glyph="&#xE7F4;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Text="{x:Bind ViewModel.DeckText, Mode=OneWay}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
-                                Visibility="{x:Bind local:Ui.Show(ViewModel.IsCapturing), Mode=OneWay}"
-                                ToolTipService.ToolTip="Frames written to the current file. It resets and a new file starts once it reaches the &quot;Max frames per file&quot; setting.">
-                        <TextBlock Text="File" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <ProgressBar Width="80" Maximum="100" Value="{x:Bind ViewModel.FileFrameFill, Mode=OneWay}"
-                                     VerticalAlignment="Center" />
-                        <TextBlock Text="{x:Bind ViewModel.FileFrameText, Mode=OneWay}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                    <!-- Preview volume/mute. -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                Visibility="{x:Bind local:Ui.Show(ViewModel.HasPicture), Mode=OneWay}">
+                        <Button Style="{StaticResource SubtleButtonStyle}" Command="{x:Bind ViewModel.ToggleMuteCommand}"
+                                AutomationProperties.Name="{x:Bind local:Ui.MuteButtonName(ViewModel.PreviewMuted), Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind local:Ui.MuteButtonName(ViewModel.PreviewMuted), Mode=OneWay}">
+                            <FontIcon Glyph="{x:Bind local:Ui.VolumeGlyph(ViewModel.PreviewMuted), Mode=OneWay}" FontSize="16" />
+                        </Button>
+                        <Slider Width="90" VerticalAlignment="Center" Minimum="0" Maximum="100"
+                                Value="{x:Bind ViewModel.PreviewVolume, Mode=TwoWay}"
+                                AutomationProperties.Name="Preview volume" />
                     </StackPanel>
                 </Grid>
             </StackPanel>
