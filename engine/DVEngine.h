@@ -50,6 +50,8 @@ public:
 	std::atomic<int> m_everyNth{1};
 	std::atomic<bool> m_recordPreview{true};
 	std::atomic<bool> m_DVctrl{false};
+	std::atomic<int> m_previewVolume{100};
+	std::atomic<bool> m_previewMuted{false};
 	// Capture: stop (and finish the file) after this many seconds without a DV
 	// signal, e.g. at the end of the tape. 0 keeps waiting.
 	std::atomic<int> m_signalLossSeconds{0};

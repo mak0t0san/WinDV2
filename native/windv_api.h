@@ -110,6 +110,8 @@ typedef struct windv_options {
 	int32_t recordPreview;          /* record: show the picture */
 	int32_t deckFollowsPipeline;    /* the deck plays/pauses/records with capture and record */
 	int32_t signalLossSeconds;      /* capture: stop after N s without a DV signal; 0 = never */
+	int32_t previewVolume;          /* preview: 0-100 */
+	int32_t previewMuted;           /* preview: mute the audio */
 } windv_options;
 
 /* Same values as DVEngine::StopReason. */

@@ -73,6 +73,21 @@
                 <TextBlock Text="No picture" Foreground="#B0FFFFFF" HorizontalAlignment="Center" />
             </StackPanel>
 
+            <!-- Volume overlay: only while there's a picture to go with the audio. -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Padding="12,8"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,12,12"
+                        Background="#80000000" CornerRadius="6"
+                        Visibility="{x:Bind local:Ui.Show(ViewModel.HasPicture), Mode=OneWay}">
+                <Button Style="{StaticResource SubtleButtonStyle}" Command="{x:Bind ViewModel.ToggleMuteCommand}"
+                        AutomationProperties.Name="{x:Bind local:Ui.MuteButtonName(ViewModel.PreviewMuted), Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind local:Ui.MuteButtonName(ViewModel.PreviewMuted), Mode=OneWay}">
+                    <FontIcon Glyph="{x:Bind local:Ui.VolumeGlyph(ViewModel.PreviewMuted), Mode=OneWay}" FontSize="16" />
+                </Button>
+                <Slider Width="110" VerticalAlignment="Center" Minimum="0" Maximum="100"
+                        Value="{x:Bind ViewModel.PreviewVolume, Mode=TwoWay}"
+                        AutomationProperties.Name="Preview volume" />
+            </StackPanel>
+
             <!-- Transport -->
             <Border Grid.Row="2" Style="{StaticResource CardStyle}">
                 <Grid ColumnSpacing="16">

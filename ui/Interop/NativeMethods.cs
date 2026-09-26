@@ -102,6 +102,8 @@ internal struct NativeOptions
     public int RecordPreview;
     public int DeckFollowsPipeline;
     public int SignalLossSeconds;
+    public int PreviewVolume;
+    public int PreviewMuted;
 }
 
 [StructLayout(LayoutKind.Sequential)]

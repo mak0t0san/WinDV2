@@ -378,6 +378,7 @@ void DVEngine::CaptureLoop()
 
 		// Only preview while the queue is draining comfortably.
 		if (m_monitor && m_queue->Load() < m_queue->Capacity() / 2) {
+			m_monitor->SetVolume(m_previewVolume, m_previewMuted);
 			m_monitor->HandleFrame(frame->duration, frame->data);
 		}
 
@@ -469,6 +470,7 @@ void DVEngine::RecordLoop()
 			NotifyTimeChange(dvTime);
 		}
 		if (m_monitor && m_recordPreview && (m_queue->IsClosed() || m_queue->Load() > m_queue->Capacity() / 2)) {
+			m_monitor->SetVolume(m_previewVolume, m_previewMuted);
 			m_monitor->HandleFrame(frame->duration, frame->data);
 		}
 

@@ -49,6 +49,8 @@ public sealed partial class MainViewModel : ObservableObject
         RecordDevice = settings.RecordDevice;
         CaptureFile = settings.CaptureFile;
         RecordFiles = settings.RecordFile;
+        PreviewVolume = settings.PreviewVolume;
+        PreviewMuted = settings.PreviewMuted;
         Timecode = FormatTimecode(-1);
         RecordedAt = StatusText = DeckText = DroppedText = ErrorMessage = SignalText = DiskText = FileFrameText = "";
         ErrorTitle = "Something went wrong";
@@ -124,6 +126,16 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool ShowsPlaceholder => !HasPicture;
 
+    /// <summary>The live preview's audio volume, 0-100. Applied to the engine immediately.</summary>
+    [ObservableProperty] public partial int PreviewVolume { get; set; }
+    [ObservableProperty] public partial bool PreviewMuted { get; set; }
+
+    partial void OnPreviewVolumeChanged(int value) => ApplyOptions();
+    partial void OnPreviewMutedChanged(bool value) => ApplyOptions();
+
+    [RelayCommand]
+    private void ToggleMute() => PreviewMuted = !PreviewMuted;
+
     /// <summary>"Signal" / "No signal": whether DV frames are arriving from the source.</summary>
     [ObservableProperty] public partial string SignalText { get; set; }
     [ObservableProperty] public partial bool HasSignal { get; set; }
@@ -166,6 +178,8 @@ public sealed partial class MainViewModel : ObservableObject
         _settings.RecordDevice = RecordDevice;
         _settings.CaptureFile = CaptureFile;
         _settings.RecordFile = RecordFiles;
+        _settings.PreviewVolume = PreviewVolume;
+        _settings.PreviewMuted = PreviewMuted;
         _engine = null;
     }
 
@@ -619,7 +633,9 @@ public sealed partial class MainViewModel : ObservableObject
             _settings.EveryNth,
             _settings.RecordPreview,
             DeckFollowsPipeline: IsRecordTool && _settings.DeckControl,
-            _settings.SignalLossSeconds));
+            _settings.SignalLossSeconds,
+            PreviewVolume,
+            PreviewMuted));
     }
 
     /// <summary>
