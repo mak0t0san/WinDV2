@@ -18,8 +18,10 @@ permissions:
 jobs:
   build:
     name: Build (${{ matrix.arch }})
-    # Windows Server 2025 with Visual Studio 2026: the v145 toolset, MFC for it,
-    # the 26100 SDK and .NET 10.
+    # Windows Server 2025 with Visual Studio 2026: the v145 toolset, ATL/MFC for it
+    # (ATL is needed by engine/; MFC itself no longer builds anything, since the
+    # retired MFC app in legacy/app/ isn't part of the solution), the 26100 SDK and
+    # .NET 10.
     runs-on: windows-2025-vs2026
     strategy:
       fail-fast: false

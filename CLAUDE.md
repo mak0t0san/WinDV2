@@ -2,10 +2,11 @@
 
 WinDV 2 (by Makoto, <https://github.com/mak0t0san/WinDV2>; based on Petr Mourek's WinDV
 1.2.3): DV capture/record over FireWire. Originally Visual C++ 6 MFC + DirectShow,
-now a C++20 DirectShow engine with two front ends: a C# WinUI 3 app (`ui/`, the new UI)
-and the original MFC dialog (`app/`, kept until the new app is hardware-tested). Win32
-and x64, Visual Studio 2026. See [README.md](README.md) for the full picture; this file
-covers what is easy to get wrong.
+now a C++20 DirectShow engine with a C# WinUI 3 front end (`ui/`). The original MFC
+dialog was kept alongside it (`app/`) until the WinUI app was hardware-tested; it has
+since been retired to `legacy/app/` (not built). Win32 and x64, Visual Studio 2026.
+See [README.md](README.md) for the full picture; this file covers what is easy to get
+wrong.
 
 ## Build and test
 
@@ -15,12 +16,12 @@ covers what is easy to get wrong.
 x64\Release\WinDV.Tests.exe
 ```
 
-Outputs: `<Platform>\<Configuration>\` holds the MFC `WinDV.exe`, `WinDV.Tests.exe` and
-`WinDV.Native.dll`. The WinUI app is in
+Outputs: `<Platform>\<Configuration>\` holds `WinDV.Tests.exe`, `WinDV.Native.dll` and
+`WinDVLauncher.exe`. The WinUI app is in
 `ui\bin\<x64|x86>\<Configuration>\net10.0-windows10.0.26100.0\win-<x64|x86>\WinDV.exe`,
 with the DLL copied next to it. Build order: `baseclasses`, `WinDVCore` and `WinDVEngine`
-(static libs), then `WinDV`, `WinDV.Native` and `WinDV.Tests`, then `WinDV.UI`.
-`WinDVLauncher` (`launcher/`) has no dependencies.
+(static libs), then `WinDV.Native` and `WinDV.Tests`, then `WinDV.UI`. `WinDVLauncher`
+(`launcher/`) has no dependencies.
 
 Release packaging is `build\package.ps1 -Arch x64|x86` (CI uses it too). It writes an Inno
 Setup installer (`installer/WinDV.iss`) and a portable zip to `dist\`. It ships a
@@ -35,11 +36,13 @@ remove `HKCU\Software\Petr Mourek` (see Gotchas).
 
 Layout: one folder per project, with `.cpp` and `.h` side by side (no src/include split).
 The folders are `ui/` (WinDV.UI, C#), `native/` (WinDV.Native DLL), `engine/`
-(WinDVEngine), `app/` (MFC WinDV), `core/`, `tests/`, `launcher/` (the portable zip's
-stub exe), `installer/`, `build/`, `external/` (vendored) and `legacy/` (VC6 files, not built). The vcxproj files reach the rest of the repo through
-a `$(RepoRoot)` property, so use that rather than `$(ProjectDir)` or `$(SolutionDir)`
-for paths outside the project. `$(SolutionDir)` is wrong when a project is built on its
-own. `app/` and `native/` add `engine/` and `core/` to their include paths.
+(WinDVEngine), `core/`, `tests/`, `launcher/` (the portable zip's stub exe),
+`installer/`, `build/`, `external/` (vendored) and `legacy/` (retired/historical, not
+built: the VC6-era files and, since its retirement, the original MFC app in
+`legacy/app/`). The vcxproj files reach the rest of the repo through a `$(RepoRoot)`
+property, so use that rather than `$(ProjectDir)` or `$(SolutionDir)` for paths outside
+the project. `$(SolutionDir)` is wrong when a project is built on its own. `native/`
+adds `engine/` and `core/` to its include paths.
 
 The solution's `Win32` platform maps to `x86` for the C# project, and the csproj maps
 back to `Win32` (`NativePlatform`) to build and copy the right `WinDV.Native.dll`.
@@ -49,8 +52,8 @@ using `.github/release-notes/vX.Y.Z.md` as the notes if that file exists. Its `w
 job then opens a PR at `microsoft/winget-pkgs` for package `Makoto.WinDV2` (installers
 only), using the `WINGET_TOKEN` secret and the `mak0t0san/winget-pkgs` fork; without the
 secret the job is skipped. The version
-lives in `ui/WinDV.csproj` (`<Version>`) and `app/WinDV.rc` (VERSIONINFO). A tag build
-overrides it with the tag's version.
+lives in `ui/WinDV.csproj` (`<Version>`). A tag build overrides it with the tag's
+version.
 
 The C# project references only the WinUI components of the Windows App SDK (pinned to
 the versions of the 2.5.1 meta-package), not `Microsoft.WindowsAppSDK` itself. That
@@ -73,13 +76,13 @@ Windows paths).
 
 Changing any of these breaks the build in non-obvious ways:
 
-- **No `/permissive-` on anything that includes `<streams.h>`** (WinDV, WinDVEngine,
+- **No `/permissive-` on anything that includes `<streams.h>`** (WinDVEngine,
   WinDV.Native). It fails under that flag (C4596, `CAggDirectDraw` destructor), so those
   projects use individual `/Zc:` switches instead. `WinDVCore` and `WinDV.Tests` include
   no DirectShow and do use `/permissive-`.
-- **Static CRT everywhere** (`/MT`, and static MFC in `app/`). All C++ projects must
-  match, or the link fails. Debug builds must also define `DEBUG` to match baseclasses,
-  because it changes the layout of their classes.
+- **Static CRT everywhere** (`/MT`). All C++ projects must match, or the link fails.
+  Debug builds must also define `DEBUG` to match baseclasses, because it changes the
+  layout of their classes.
 - **`<streams.h>` pulls in `edevdefs.h`, not `xprtdefs.h`.** `ED_MODE_PLAY_FASTEST_FWD`
   and `_REV` are therefore missing. `engine/DVDevice.cpp` defines them locally; don't
   include `xprtdefs.h`, because it clashes with `edevdefs.h`.
@@ -90,26 +93,24 @@ Changing any of these breaks the build in non-obvious ways:
   the C# enums and structs in step with the header.
 - **`PlatformToolset` is `v145`**, the VS 2026 toolset. Not `v180`: that is only the
   name of the `MSBuild\Microsoft\VC\v180` directory and is not a valid toolset value.
-- **`GenerateManifest=false`.** `WinDV.rc` embeds `WinDV.exe.manifest` at resource
-  ID 1, the same ID MSBuild's generated manifest uses. Re-enabling it gives
-  `CVT1100: duplicate resource` at link time. The manifest uses
-  `processorArchitecture="*"` so one file serves both platforms.
 - **doctest needs `DOCTEST_CONFIG_USE_STD_HEADERS`** (set in `WinDV.Tests.vcxproj`).
   Without it doctest forward-declares `std::tuple`, which MSVC 14.5x rejects (C5285).
 - **Source files are ASCII.** There is no `/utf-8`, because `WinDV.rc` relies on code
   pages 1250/1252. Non-ASCII characters in `.cpp`/`.h`, even in comments, are read as
   ANSI.
 
-## MFC availability
+## ATL availability
 
-Building needs `Microsoft.VisualStudio.Component.VC.ATLMFC` (MFC for the *latest*
-toolset), which installs into `VC\Tools\MSVC\14.51.x\atlmfc\`. The x64 build needs the
-x64 MFC libraries from the same component.
+`engine/` uses ATL (`CComPtr`, `atlbase.h`), which on the *latest* toolset only comes
+bundled with MFC: building needs `Microsoft.VisualStudio.Component.VC.ATLMFC`, which
+installs into `VC\Tools\MSVC\14.51.x\atlmfc\`. The x64 build needs the x64 libraries
+from the same component. (The retired MFC app in `legacy/app/` used to need this
+component for MFC itself; now it's needed for ATL instead.)
 
-Do not conclude MFC is present just because some `atlmfc\include\afxwin.h` exists. The
-separate `VC.14.44.17.14.MFC` component creates a fully populated `14.44.35207\atlmfc\`
-with **no compiler in that toolset at all** (no `bin\` directory). Check for
-`VC\Tools\MSVC\<ver>\bin\Hostx64\x64\cl.exe` before trusting a toolset.
+Do not conclude the component is present just because some `atlmfc\include\afxwin.h`
+exists. The separate `VC.14.44.17.14.MFC` component creates a fully populated
+`14.44.35207\atlmfc\` with **no compiler in that toolset at all** (no `bin\` directory).
+Check for `VC\Tools\MSVC\<ver>\bin\Hostx64\x64\cl.exe` before trusting a toolset.
 
 If a VS install is needed: `vs_installer.exe ... --passive` fails with **exit code
 5007 and no UAC prompt** unless the launching process is already elevated. Use
@@ -138,9 +139,7 @@ If a VS install is needed: `vs_installer.exe ... --passive` fails with **exit co
   `Idle`/`Capturing`/`Recording` state machine, and one `std::jthread` worker. It
   reports through `DVEngineEvents` (called on worker threads). `Transport()` drives the
   deck independently of capture. `m_DVctrl` makes capture/record also move the tape, as
-  the MFC app always did.
-- `app/`: `CDV` (`DVView.h`) is a `CStatic` that is also the `DVEngine`, and turns its
-  events into `WM_DV_*` posts. `CDVToolsDlg` is the MFC UI on top.
+  the original MFC app always did.
 - `native/` (**WinDV.Native**) wraps the engine in a flat C API (`windv_api.h`) for
   `ui/`. The C# app sets `deckFollowsPipeline` (the engine's `m_DVctrl`) only on the
   record tab. On the capture tab it drives the deck itself: REC starts the tape when the
@@ -148,8 +147,8 @@ If a VS install is needed: `vs_installer.exe ... --passive` fails with **exit co
 - `ui/` (**WinDV.UI**, C#, WinUI 3, .NET 10, Windows App SDK, unpackaged and
   self-contained): `Interop/DVEngine` wraps the DLL, and `MainViewModel` holds the
   state, the commands and a 200 ms status poll. `RunAsync` runs one pipeline action at
-  a time; on failure it resets the pipeline and shows the first error (as the MFC
-  `Guarded` does). Use `[ObservableProperty]` on **partial properties**, not fields:
+  a time; on failure it resets the pipeline and shows the first error (as the retired
+  MFC app's `Guarded` did). Use `[ObservableProperty]` on **partial properties**, not fields:
   field-based ones trigger an AOT/WinRT warning, which is an error under
   `TreatWarningsAsErrors`. `Services/UpdateChecker` is the app's only network access:
   at most once a day it reads the latest release's `tag_name` from the GitHub API
@@ -165,8 +164,6 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
 - Throw `DShowError` via `CheckHR` (fails on anything but `S_OK`, as the original code
   did) or `CheckSucceeded` (fails only on `FAILED(hr)`). Always pass a message that
   says what was being attempted; `AMGetErrorText` output is appended automatically.
-- MFC UI thread: `CDVToolsDlg::Guarded(...)` catches, resets the pipeline and shows the
-  message in the status bar.
 - Across the C API, exceptions become a `windv_result` plus a message fetched with
   `windv_take_error` (`windv_engine::Call`). No exception may cross an export.
 - Worker threads and DirectShow streaming threads must not let exceptions escape.
@@ -176,15 +173,13 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
 
 ### Threads
 
-- Everything that touches the engine is in the COM MTA: the MFC UI thread, the
-  WinDV.Native engine thread and every worker (each opens its own `ComApartment`).
-- Never call `CWnd` methods (`GetParent()`, etc.) from a worker: MFC handle maps are
-  per thread. `CDV` posts to its `m_notifyWnd` with `::PostMessage`.
+- Everything that touches the engine is in the COM MTA: the WinDV.Native engine thread
+  and every worker (each opens its own `ComApartment`).
 - `DVEngine::Destroy()` order matters: set `Idle`, close the queue, stop the sources,
   join the worker, then destroy the objects. Closing the queue first is what unblocks
   the worker and any streaming thread stuck in `FrameQueue::Put`. Owners that receive
-  events (`CDV`) call `Destroy()` in their own destructor, so workers are joined while
-  the event sink is still intact.
+  events (`windv_engine`) call `Destroy()` in their own destructor, so workers are
+  joined while the event sink is still intact.
 - WinUI's UI thread is an STA, so **WinDV.Native runs the engine on its own MTA thread**
   (`EngineThread`). **That thread must run a message loop.** DirectShow creates the
   renderer's windows on the thread that builds the graph, and they are children of the UI
@@ -232,19 +227,17 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
   That is correct behaviour, not a regression. Check for other `WinDV.exe` processes,
   and do not kill the user's.
 - WinDV reads and writes `HKCU\Software\Petr Mourek\WinDV 1.2` (the subkey comes from
-  the MFC app title `AFX_IDS_APP_TITLE`, not from "WinDV"). It is **shared by both front
-  ends and the installed copy**. Back it up (`reg export "HKCU\Software\Petr Mourek"`)
-  before automated runs that close either app, and restore it afterwards.
+  the original MFC app title `AFX_IDS_APP_TITLE`, not from "WinDV"). It is **shared with
+  the installed copy** (the WinGet `PetrMourek.WinDV` package above). Back it up
+  (`reg export "HKCU\Software\Petr Mourek"`) before automated runs that close WinDV, and
+  restore it afterwards.
 - WinUI buttons *do* expose `InvokePattern`, and the `SelectorBar` items expose
-  `SelectionItemPattern`, so UI Automation works for the new app. Icon-only buttons need
+  `SelectionItemPattern`, so UI Automation works. Icon-only buttons need
   `AutomationProperties.Name`. For screenshots of a window on a monitor with a different
   DPI, use `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` with `PrintWindow`, not
   `GetWindowRect`, which is DPI-virtualized.
 - The camcorder must be in **VTR/tape mode**. In stills mode Windows loads the
   still-image driver and it never appears as a DirectShow capture device.
-- Without hardware, drive the MFC UI with Win32 messages (`WM_COMMAND` with a control
-  ID) rather than UI Automation. MFC buttons in this dialog don't expose
-  `InvokePattern`.
 
 ## Conventions
 
@@ -253,8 +246,7 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
   problem is almost certainly in how it is being used. The same goes for
   `external/doctest/`.
 - Formatting: `.clang-format` at the root (external/ opts out). Run VS's
-  `VC\Tools\Llvm\x64\bin\clang-format.exe -i` on changed files. Include order is
-  preserved deliberately: `stdafx.h` must be first in every WinDV `.cpp`.
+  `VC\Tools\Llvm\x64\bin\clang-format.exe -i` on changed files.
 - **Style is a build error.** C++ files that don't match `.clang-format`, which includes
   `InsertBraces` (braces on every `if`/`for`/`while`, even one-liners), fail the build
   through `Directory.Build.targets` (errors with code `FORMAT`; `resource.h` and
@@ -263,11 +255,16 @@ in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a
   non-private fields, `_camelCase` private fields, `s_camelCase` private static fields,
   camelCase locals/parameters. P/Invoke methods get PascalCase names plus
   `EntryPoint = "native_name"`. Renaming one without `EntryPoint` still builds, but fails
-  at runtime. C++ naming keeps its MFC style (`m_`, `CClass`).
+  at runtime. C++ naming keeps the MFC-era style (`m_`, `CClass`) the codebase has
+  always used, even though MFC itself is gone from the active build.
 - Registry value names are a compatibility surface. Keep them. (`DiscontinuityThreshold`
   was renamed from the original misspelling `DiscontinuityTreshold` on purpose, so
   a saved threshold resets to the default once.)
-- `legacy/` holds the original VC6 `.dsp`/`.dsw`/`.clw` and `CppProperties.json` (a
-  leftover from VS "Open Folder" mode that still declares the old MBCS/UNICODE defines).
-  None of it is built, and its paths predate the `app/` move. `WinDV.sln` is
-  authoritative.
+- `legacy/` is reference-only; none of it is built, and `WinDV.sln` is authoritative.
+  It holds the original VC6 `.dsp`/`.dsw`/`.clw` and `CppProperties.json` (a leftover
+  from VS "Open Folder" mode that still declares the old MBCS/UNICODE defines; its
+  paths predate the `app/` move that happened after it). It also now holds
+  `legacy/app/`: the original MFC front end, kept alongside the WinUI app until the
+  latter was hardware-tested, then retired here. Its own paths (`$(RepoRoot)`, the
+  `..\` project references) were never updated for the move into `legacy/` and are
+  therefore stale, matching the VC6 files' own precedent.

@@ -50,14 +50,14 @@ bugs are fixed (see [Changes from the original](#changes-from-the-original)). Fi
 naming and registry settings are unchanged, so an existing WinDV configuration carries
 over.
 
-There are two front ends over the same DirectShow engine:
+The front end is a **new WinUI 3 app** (`ui/`, C#) over the same DirectShow engine. It
+has a Windows 11 look (Mica, Fluent controls, light and dark themes) and VCR-style
+transport controls: Rewind, Play, Pause, Stop, Fast-forward, plus a separate red **REC**
+button that writes AVI files while the tape runs.
 
-- **The new WinUI 3 app** (`ui/`, C#). It has a Windows 11 look (Mica, Fluent controls,
-  light and dark themes) and VCR-style transport controls: Rewind, Play, Pause, Stop,
-  Fast-forward, plus a separate red **REC** button that writes AVI files while the tape
-  runs.
-- **The original MFC dialog** (`app/`). It is kept, with its behaviour unchanged, until the
-  new app has been tested with a camcorder.
+The original MFC dialog was kept alongside it, unchanged, until the new app had been
+tested with a camcorder. That's now done, and the MFC app has been retired to
+`legacy/app/` (kept for reference; not part of the build).
 
 ## Requirements
 
@@ -65,7 +65,8 @@ There are two front ends over the same DirectShow engine:
 - **Visual Studio 2026** with these components:
   - *Desktop development with C++*
   - **C++ MFC for latest v145 build tools (x86 & x64)**. This one is easy to miss and
-    is not part of the default C++ workload. Without it the build fails at `afxwin.h`.
+    is not part of the default C++ workload. The engine needs it for ATL (`atlbase.h`),
+    which on this toolset only comes bundled with MFC. Without it the build fails.
   - Windows 11 SDK (10.0.26100 or similar)
   - *.NET desktop development* or just the **.NET 10 SDK**, for the WinUI app. The
     Windows App SDK comes from NuGet at restore time, so the first build needs network
@@ -90,7 +91,6 @@ project the solution maps `Win32` to `x86`.) Output:
 | --- | --- |
 | New WinUI app (run this folder as is) | `ui\bin\<x64\|x86>\<Configuration>\net10.0-windows10.0.26100.0\win-<x64\|x86>\WinDV.exe` |
 | Engine DLL used by it | `<Platform>\<Configuration>\WinDV.Native.dll`, copied next to the app |
-| Original MFC app | `<Platform>\<Configuration>\WinDV.exe` |
 | Tests | `<Platform>\<Configuration>\WinDV.Tests.exe` |
 | Portable-zip launcher | `<Platform>\<Configuration>\WinDVLauncher.exe` |
 
@@ -122,8 +122,9 @@ CI runs the same script for both architectures.
 
 ## Tests
 
-The solution also builds `WinDV.Tests.exe` next to `WinDV.exe`. It covers the logic
-that doesn't need a camcorder: DV timestamp decoding, capture file numbering,
+The solution also builds `WinDV.Tests.exe` in the same `<Platform>\<Configuration>\`
+folder as `WinDV.Native.dll`. It covers the logic that doesn't need a camcorder: DV
+timestamp decoding, capture file numbering,
 date/time format validation, command-line parsing, the frame queue, and what each
 transport button asks the deck to do.
 
@@ -178,17 +179,10 @@ ui/                          WinDV.UI: the WinUI 3 app (C#, .NET 10, unpackaged,
   Interop/                   P/Invoke over windv_api.h, and the DVEngine wrapper
   ViewModels/MainViewModel   Transport commands, status polling, pipeline lifecycle
   Views/                     Settings screen, About dialog
-  Services/SettingsStore     Registry settings (shared with the MFC app)
+  Services/SettingsStore     Registry settings (the same key WinDV has always used)
   Services/UpdateChecker     Asks GitHub for the latest release (the "new version" notice)
 native/                      WinDV.Native: the engine as a DLL with a flat C API (windv_api.h)
 engine/                      WinDVEngine: the DirectShow engine (Win32 + ATL, no MFC)
-app/                         The original MFC application
-  DVToolsDlg.cpp / .h        Main dialog: tabs, status, command-line handling
-  DVView.cpp / .h            CDV: the preview control, wrapping DVEngine
-  CaptureCfg, RecordCfg      Settings pages
-  VideoDeviceSel             Device picker dialog
-  ToolTab, DropFilesEdit     UI helpers (tab control, drag-and-drop edit box)
-  WinDV.rc, Resource.h       Resources; embeds WinDV.exe.manifest at ID 1
 core/                        WinDVCore: standard C++ logic with no MFC or DirectShow
 tests/                       WinDV.Tests: doctest unit tests for core/
 launcher/                    WinDVLauncher: the portable zip's WinDV.exe, starts app\WinDV.exe
@@ -197,8 +191,10 @@ build/package.ps1            Packages a built app: installer + portable zip (use
 docs/screenshot.png          The screenshot above (the preview shows a synthetic image)
 external/baseclasses/        Vendored DirectShow base classes (MIT, Microsoft)
 external/doctest/            Vendored doctest 2.4.12 (MIT)
-legacy/                      Original VC6 WinDV.dsp/.dsw/.clw and a stale CppProperties.json,
-                             kept for reference only; not part of the build
+legacy/                      Reference only, not part of the build: original VC6
+                             WinDV.dsp/.dsw/.clw, a stale CppProperties.json, and
+                             legacy/app/ (the original MFC front end, retired once the
+                             WinUI app was hardware-tested)
 ```
 
 Each project folder keeps its `.cpp` and `.h` files side by side. Build output goes to
@@ -227,9 +223,8 @@ than letting the graph handle everything internally:
 `DVEngine` owns the pipeline, holds the state machine
 (`Idle`/`Capturing`/`Recording`/…), runs the capture and record worker threads, and
 sends deck transport commands (`DVTransport`; the button logic is in
-`core/TransportLogic`). It reports to a `DVEngineEvents` sink. The MFC app's `CDV`
-turns those events into window messages. `WinDV.Native` passes them to the C# app as
-callbacks.
+`core/TransportLogic`). It reports to a `DVEngineEvents` sink; `WinDV.Native` passes
+those events to the C# app as callbacks.
 
 `WinDV.Native` runs the engine on a thread of its own in the COM multithreaded
 apartment and forwards every API call to it, because the WinUI UI thread is
@@ -239,8 +234,7 @@ settings or dialogs are showing.
 
 Errors are thrown as `DShowError`, which carries the `HRESULT` and a message saying
 what failed. Errors on worker threads are stored in `DVEngine`, and the front end is
-notified. Each UI shows them in its own way: the MFC status bar, or an InfoBar in the
-WinUI app.
+notified; the WinUI app shows them in an InfoBar.
 
 ## Changes from the original
 
@@ -311,16 +305,15 @@ names containing dots, and the switch away from the old Platform SDK.)
 
 - Registry settings live under the same key (`HKCU\Software\Petr Mourek\WinDV 1.2`,
   named after the app title "WinDV 1.2") with the same value names, so an existing
-  configuration carries over. Both front ends share it. The one exception is
-  `DiscontinuityThreshold`, spelled `DiscontinuityTreshold` by WinDV 1.2.3, so that
-  setting is not carried over.
+  configuration carries over. The one exception is `DiscontinuityThreshold`, spelled
+  `DiscontinuityTreshold` by WinDV 1.2.3, so that setting is not carried over.
 - Capture file naming, the command-line syntax, and the MFC dialog layout.
 - The vendored DirectShow base classes. Only their project file changed, to add x64
   and switch to Unicode.
 
 ## Vendored dependencies
 
-The engine (`engine/DShowBase.h`) and the MFC app (`app/StdAfx.h`) include
+The engine (`engine/DShowBase.h`, also used as `native/`'s precompiled header) includes
 `<streams.h>`, the DirectShow base classes. These never shipped in
 the Windows SDK; they came from the DirectX SDK samples, which are long discontinued.
 (Confusingly, the Windows SDK *does* still ship a prebuilt `strmbase.lib`, just not its
