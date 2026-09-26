@@ -21,7 +21,8 @@ public readonly record struct EngineStatus(
     int FramesReceived,
     StopReason StopReason,
     long Time,
-    long DvTime);
+    long DvTime,
+    int FileFrameCount);
 
 public sealed record EngineOptions(
     bool Type2Avi,
@@ -192,12 +193,13 @@ public sealed unsafe class DvEngine : IDisposable
     {
         if (_handle == 0)
         {
-            return new EngineStatus(EngineState.Idle, DeckMode.Unknown, false, 0, -1, 0, 0, 0, StopReason.None, -1, 0);
+            return new EngineStatus(EngineState.Idle, DeckMode.Unknown, false, 0, -1, 0, 0, 0, StopReason.None, -1, 0, -1);
         }
 
         NativeMethods.GetStatus(_handle, out var s);
         return new EngineStatus((EngineState)s.State, (DeckMode)s.DeckMode, s.CanControlDeck != 0, s.Dropped,
-            s.Counter, s.QueueLoad, s.QueueCapacity, s.FramesReceived, (StopReason)s.StopReason, s.Time, s.DVTime);
+            s.Counter, s.QueueLoad, s.QueueCapacity, s.FramesReceived, (StopReason)s.StopReason, s.Time, s.DVTime,
+            s.FileFrameCount);
     }
 
     public void SetOptions(EngineOptions options)

@@ -320,7 +320,6 @@ void DVEngine::CaptureLoop()
 	CMediaType type;
 	m_dvInput->GetMediaType(&type);
 
-	long nFrames = 0;
 	long counter = 0;
 	long dropped = m_dvInput->GetDroppedFrames();
 	std::time_t dvTime = 0, lastValidDVTime = 0;
@@ -393,7 +392,7 @@ void DVEngine::CaptureLoop()
 
 		if (m_state == Capturing) {
 			const int threshold = m_discontinuityThreshold;
-			if (m_aviWriter && (nFrames >= m_maxAVIFrames || (threshold > 0 && deltaDVTime > threshold))) {
+			if (m_aviWriter && (m_fileFrameCount >= m_maxAVIFrames || (threshold > 0 && deltaDVTime > threshold))) {
 				FinishWriter();
 			}
 			if (!m_aviWriter) {
@@ -404,12 +403,12 @@ void DVEngine::CaptureLoop()
 				}
 				m_aviWriter = std::make_unique<CAVIWriter>(target.filename, target.dtformat, target.ndigits, dvTime,
 				                                           m_type2AVI, type);
-				nFrames = 0;
+				m_fileFrameCount = 0;
 				counter = 0;
 			}
 			if (counter % (std::max)(m_everyNth.load(), 1) == 0) {
 				m_aviWriter->HandleFrame(frame->duration, frame->data);
-				++nFrames;
+				++m_fileFrameCount;
 			}
 			if (dvTime > 0 && m_aviWriter->m_dvTime <= 0) {
 				m_aviWriter->m_dvTime = dvTime;
@@ -431,6 +430,7 @@ void DVEngine::CaptureLoop()
 				m_dropped = 0;
 				m_counter = 0;
 				m_time = 0;
+				m_fileFrameCount = -1;
 			}
 		}
 	}

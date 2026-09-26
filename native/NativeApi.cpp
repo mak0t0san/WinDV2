@@ -97,6 +97,7 @@ struct windv_engine final : private DVEngineEvents {
 			status->dvTime = m_engine->GetDVTime();
 			status->framesReceived = m_engine->GetFramesReceived();
 			status->stopReason = static_cast<std::int32_t>(m_engine->GetStopReason());
+			status->fileFrameCount = m_engine->GetFileFrameCount();
 		}
 	}
 
