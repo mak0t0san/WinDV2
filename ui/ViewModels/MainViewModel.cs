@@ -50,7 +50,7 @@ public sealed partial class MainViewModel : ObservableObject
         CaptureFile = settings.CaptureFile;
         RecordFiles = settings.RecordFile;
         Timecode = FormatTimecode(-1);
-        RecordedAt = StatusText = DeckText = DroppedText = ErrorMessage = SignalText = DiskText = "";
+        RecordedAt = StatusText = DeckText = DroppedText = ErrorMessage = SignalText = DiskText = FileFrameText = "";
         ErrorTitle = "Something went wrong";
         ErrorSeverity = InfoBarSeverity.Error;
         UpdateTitle = "";
@@ -91,6 +91,8 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial string DroppedText { get; set; }
     [ObservableProperty] public partial double QueueFill { get; set; }
     [ObservableProperty] public partial bool IsQueueVisible { get; set; }
+    [ObservableProperty] public partial double FileFrameFill { get; set; }
+    [ObservableProperty] public partial string FileFrameText { get; set; }
 
     [ObservableProperty] public partial bool IsCapturing { get; set; }
     [ObservableProperty] public partial bool IsRecordingToTape { get; set; }
@@ -727,6 +729,7 @@ public sealed partial class MainViewModel : ObservableObject
         DroppedText = s.State == EngineState.Capturing && s.Dropped > 0 ? $"{s.Dropped} dropped" : "";
         IsQueueVisible = s.State is EngineState.Capturing or EngineState.Recording or EngineState.RecordPaused;
         QueueFill = s.QueueCapacity > 0 ? 100.0 * s.QueueLoad / s.QueueCapacity : 0;
+        UpdateFileFrameProgress(s);
         if (!IsBusy || s.State != EngineState.Idle)
         {
             StatusText = StateText(s.State, s.StopReason);
@@ -748,6 +751,33 @@ public sealed partial class MainViewModel : ObservableObject
             CloseRequested?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    // Frames toward the "max frames per file" limit, and roughly how long is
+    // left, estimated from this session's own average frame duration
+    // (s.Time is a REFERENCE_TIME in 100 ns units, i.e. exactly a TimeSpan tick).
+    private void UpdateFileFrameProgress(EngineStatus s)
+    {
+        if (s.State != EngineState.Capturing || s.FileFrameCount < 0 || _settings.MaxAviFrames <= 0)
+        {
+            FileFrameFill = 0;
+            FileFrameText = "";
+            return;
+        }
+
+        int max = _settings.MaxAviFrames;
+        FileFrameFill = 100.0 * Math.Min(s.FileFrameCount, max) / max;
+        string text = $"{s.FileFrameCount:N0} / {max:N0}";
+        if (s.Counter > 0)
+        {
+            double ticksPerFrame = (double)s.Time / s.Counter;
+            long remainingFrames = Math.Max(0, max - s.FileFrameCount);
+            text += $" · ~{FormatFileEta(TimeSpan.FromTicks((long)(ticksPerFrame * remainingFrames)))} left";
+        }
+        FileFrameText = text;
+    }
+
+    private static string FormatFileEta(TimeSpan t) =>
+        t.TotalHours >= 1 ? $"{(int)t.TotalHours}h {t.Minutes}m" : $"{t.Minutes}m {t.Seconds}s";
 
     private int _lastFrames;
     private long _lastFrameTick;

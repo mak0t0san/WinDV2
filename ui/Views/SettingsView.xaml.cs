@@ -14,6 +14,8 @@ public sealed class SettingsClosedEventArgs(bool saved) : EventArgs
 public sealed partial class SettingsView : UserControl
 {
     private const int MaxSuffixDigits = 4;
+    private const double PalFps = 25.0;
+    private const double NtscFps = 30000.0 / 1001.0;
     private SettingsStore? _settings;
 
     public SettingsView()
@@ -35,6 +37,7 @@ public sealed partial class SettingsView : UserControl
         AviTypeButtons.SelectedIndex = settings.Type2Avi ? 1 : 0;
         ThresholdBox.Value = settings.DiscontinuityThreshold;
         MaxFramesBox.Value = settings.MaxAviFrames;
+        UpdateMaxFramesEstimate();
         EveryNthBox.Value = settings.EveryNth;
         SignalLossSwitch.IsOn = settings.SignalLossSeconds > 0;
         SignalLossBox.Value = settings.SignalLossSeconds > 0
@@ -90,6 +93,30 @@ public sealed partial class SettingsView : UserControl
 
     private void SignalLossSwitch_Toggled(object sender, RoutedEventArgs e) =>
         SignalLossBox.IsEnabled = SignalLossSwitch.IsOn;
+
+    private void MaxFramesBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args) =>
+        UpdateMaxFramesEstimate();
+
+    // Frames is what's actually stored (and enforced), so this is only ever a
+    // display hint: the real PAL/NTSC rate isn't known until a device connects.
+    private void UpdateMaxFramesEstimate()
+    {
+        if (double.IsNaN(MaxFramesBox.Value) || MaxFramesBox.Value <= 0)
+        {
+            MaxFramesEstimateText.Text = "";
+            return;
+        }
+
+        double frames = MaxFramesBox.Value;
+        MaxFramesEstimateText.Text =
+            $"~{FormatEstimate(frames / PalFps)} at PAL (25 fps) · ~{FormatEstimate(frames / NtscFps)} at NTSC (29.97 fps)";
+    }
+
+    private static string FormatEstimate(double seconds)
+    {
+        var t = TimeSpan.FromSeconds(seconds);
+        return t.TotalHours >= 1 ? $"{(int)t.TotalHours}h {t.Minutes}m" : $"{t.Minutes}m {t.Seconds}s";
+    }
 
     // Shows what a capture file name looks like with these settings.
     private void UpdateExample()

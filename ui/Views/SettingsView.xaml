@@ -39,21 +39,28 @@
                             <RadioButton Content="Type 2: separate video and audio streams (vids + auds). Most editors prefer this." />
                         </RadioButtons>
 
-                        <Grid ColumnSpacing="16" RowSpacing="12">
+                        <Grid ColumnSpacing="16" RowSpacing="4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
                             <NumberBox x:Name="ThresholdBox" Header="New file on a time jump of (s)"
                                        Minimum="0" Maximum="1000000" SpinButtonPlacementMode="Compact"
                                        ToolTipService.ToolTip="Start a new file when the camcorder's recording time jumps (a new scene). 0 turns this off." />
                             <NumberBox x:Name="MaxFramesBox" Grid.Column="1" Header="Max frames per file"
                                        Minimum="10" Maximum="1000000" SpinButtonPlacementMode="Compact"
-                                       ToolTipService.ToolTip="22 500 frames is 15 minutes of PAL video." />
+                                       ValueChanged="MaxFramesBox_ValueChanged" />
                             <NumberBox x:Name="EveryNthBox" Grid.Column="2" Header="Keep every Nth frame"
                                        Minimum="1" Maximum="1000000" SpinButtonPlacementMode="Compact"
                                        ToolTipService.ToolTip="1 keeps every frame. Higher values make time-lapse captures." />
+                            <TextBlock x:Name="MaxFramesEstimateText" Grid.Row="1" Grid.Column="1"
+                                       TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </Grid>
 
                         <StackPanel Spacing="4">

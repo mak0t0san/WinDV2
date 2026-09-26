@@ -63,6 +63,8 @@ public:
 	long GetDropped() const { return m_dropped; }
 	std::size_t GetQueueLoad() const;
 	long GetCounter() const { return m_counter; }
+	// Frames written to the file currently being captured; -1 when idle.
+	long GetFileFrameCount() const { return m_fileFrameCount; }
 	REFERENCE_TIME GetTime() const { return m_time; }
 	std::time_t GetDVTime() const { return m_dvTime; }
 	// Frames delivered by the source since the pipeline was built; shows whether
@@ -130,6 +132,7 @@ private:
 
 	std::atomic<long> m_dropped{0};
 	std::atomic<long> m_counter{-1};
+	std::atomic<long> m_fileFrameCount{-1};
 	std::atomic<REFERENCE_TIME> m_time{-1};
 	std::atomic<REFERENCE_TIME> m_captureTime{0};
 	std::atomic<std::time_t> m_dvTime{0};

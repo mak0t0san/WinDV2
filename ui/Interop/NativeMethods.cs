@@ -87,7 +87,7 @@ internal struct NativeStatus
     public int QueueCapacity;
     public int FramesReceived;
     public int StopReason;
-    public int Reserved;
+    public int FileFrameCount;
     public long Time;
     public long DVTime;
 }
