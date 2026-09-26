@@ -73,26 +73,14 @@
                 <TextBlock Text="No picture" Foreground="#B0FFFFFF" HorizontalAlignment="Center" />
             </StackPanel>
 
-            <!-- Volume overlay: only while there's a picture to go with the audio. -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Padding="12,8"
-                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,12,12"
-                        Background="#80000000" CornerRadius="6"
-                        Visibility="{x:Bind local:Ui.Show(ViewModel.HasPicture), Mode=OneWay}">
-                <Button Style="{StaticResource SubtleButtonStyle}" Command="{x:Bind ViewModel.ToggleMuteCommand}"
-                        AutomationProperties.Name="{x:Bind local:Ui.MuteButtonName(ViewModel.PreviewMuted), Mode=OneWay}"
-                        ToolTipService.ToolTip="{x:Bind local:Ui.MuteButtonName(ViewModel.PreviewMuted), Mode=OneWay}">
-                    <FontIcon Glyph="{x:Bind local:Ui.VolumeGlyph(ViewModel.PreviewMuted), Mode=OneWay}" FontSize="16" />
-                </Button>
-                <Slider Width="110" VerticalAlignment="Center" Minimum="0" Maximum="100"
-                        Value="{x:Bind ViewModel.PreviewVolume, Mode=TwoWay}"
-                        AutomationProperties.Name="Preview volume" />
-            </StackPanel>
-
-            <!-- Transport -->
+            <!-- Transport. Volume/mute live here, not over the preview: that border
+                 is a native child HWND (see MainWindow.UpdatePreview) and XAML can't
+                 draw on top of it. -->
             <Border Grid.Row="2" Style="{StaticResource CardStyle}">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" MinWidth="170" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" MinWidth="130" />
                     </Grid.ColumnDefinitions>
@@ -145,7 +133,19 @@
                         </Button>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                Visibility="{x:Bind local:Ui.Show(ViewModel.HasPicture), Mode=OneWay}">
+                        <Button Style="{StaticResource SubtleButtonStyle}" Command="{x:Bind ViewModel.ToggleMuteCommand}"
+                                AutomationProperties.Name="{x:Bind local:Ui.MuteButtonName(ViewModel.PreviewMuted), Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind local:Ui.MuteButtonName(ViewModel.PreviewMuted), Mode=OneWay}">
+                            <FontIcon Glyph="{x:Bind local:Ui.VolumeGlyph(ViewModel.PreviewMuted), Mode=OneWay}" FontSize="16" />
+                        </Button>
+                        <Slider Width="90" VerticalAlignment="Center" Minimum="0" Maximum="100"
+                                Value="{x:Bind ViewModel.PreviewVolume, Mode=TwoWay}"
+                                AutomationProperties.Name="Preview volume" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="3" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <Button Command="{x:Bind ViewModel.RecCommand}"
                                 Style="{x:Bind local:Ui.RecStyle(ViewModel.IsCapturing), Mode=OneWay}"
                                 Visibility="{x:Bind local:Ui.Show(ViewModel.IsCaptureTool), Mode=OneWay}"
