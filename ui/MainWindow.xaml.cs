@@ -41,7 +41,7 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         SetTitleBar(AppTitleBar);
         SystemBackdrop = new MicaBackdrop();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "WinDV.ico"));
-        RestoreWindowPlacement();
+        SetMinimumWindowSize();
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _engine = DvEngine.Create(_hwnd, DispatcherQueue);
@@ -68,6 +68,7 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private async void Root_Loaded(object sender, RoutedEventArgs e)
     {
         Root.Loaded -= Root_Loaded;
+        RestoreWindowPlacement();
         UpdatePreview();
 
         string[] args = Environment.GetCommandLineArgs().Skip(1).ToArray();
@@ -151,15 +152,25 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         Close();
     }
 
+    private void SetMinimumWindowSize()
+    {
+        double scale = GetDpiForWindowScale();
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.PreferredMinimumWidth = (int)(MinWidth * scale);
+            presenter.PreferredMinimumHeight = (int)(MinHeight * scale);
+        }
+    }
+
+    // Called from Root_Loaded, once the window is actually shown on its starting monitor: moving
+    // or resizing it earlier, before it has settled there, lets Windows silently rescale the
+    // requested size by the DPI ratio between that monitor and the target one on a multi-monitor
+    // setup where they're scaled differently, growing (or shrinking) the window a bit more every
+    // time it's restored onto a monitor with different scaling.
     private void RestoreWindowPlacement()
     {
         double scale = GetDpiForWindowScale();
         int minW = (int)(MinWidth * scale), minH = (int)(MinHeight * scale);
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.PreferredMinimumWidth = minW;
-            presenter.PreferredMinimumHeight = minH;
-        }
 
         // The original WinDV's window was much smaller; grow old sizes to fit.
         int width = Math.Max(_settings.WindowWidth, minW);
@@ -181,7 +192,11 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         rect.Height = Math.Min(rect.Height, work.Height);
         rect.X = Math.Clamp(rect.X, work.X, work.X + work.Width - rect.Width);
         rect.Y = Math.Clamp(rect.Y, work.Y, work.Y + work.Height - rect.Height);
-        AppWindow.MoveAndResize(rect);
+
+        // Move and resize separately: a single MoveAndResize that crosses into a differently-scaled
+        // monitor gets its size rescaled by Windows too; a resize with no monitor change afterward isn't.
+        AppWindow.Move(new PointInt32(rect.X, rect.Y));
+        AppWindow.Resize(new SizeInt32(rect.Width, rect.Height));
     }
 
     private void SaveWindowPlacement()
