@@ -171,7 +171,11 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         var rect = new RectInt32(_settings.WindowX, _settings.WindowY, width, height);
-        DisplayArea area = DisplayArea.GetFromRect(rect, DisplayAreaFallback.Nearest);
+        // Picked from the saved top-left point, not the (possibly oversized) rect: on multi-monitor
+        // setups, using the full rect could pick a neighboring monitor if the saved size happened to
+        // overlap it more, snapping the window to fill the wrong monitor instead of keeping its size.
+        DisplayArea area = DisplayArea.GetFromPoint(new PointInt32(_settings.WindowX, _settings.WindowY),
+            DisplayAreaFallback.Nearest);
         RectInt32 work = area.WorkArea;
         rect.Width = Math.Min(rect.Width, work.Width);
         rect.Height = Math.Min(rect.Height, work.Height);
