@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinDV.Interop;
 using WinDV.Services;
+using WinDV.ViewModels;
 
 namespace WinDV.Views;
 
@@ -17,6 +18,7 @@ public sealed partial class SettingsView : UserControl
     private const double PalFps = 25.0;
     private const double NtscFps = 30000.0 / 1001.0;
     private SettingsStore? _settings;
+    private MainViewModel? _viewModel;
 
     public SettingsView()
     {
@@ -29,9 +31,11 @@ public sealed partial class SettingsView : UserControl
 
     public event EventHandler<SettingsClosedEventArgs>? Closed;
 
-    public void Load(SettingsStore settings)
+    public void Load(SettingsStore settings, MainViewModel viewModel)
     {
         _settings = settings;
+        _viewModel = viewModel;
+        UpdateCheckStatusText.Text = "";
         DeckControlSwitch.IsOn = settings.DeckControl;
 
         AviTypeButtons.SelectedIndex = settings.Type2Avi ? 1 : 0;
@@ -90,6 +94,20 @@ public sealed partial class SettingsView : UserControl
     }
 
     private void DigitsBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateExample();
+
+    private async void CheckNowButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null)
+        {
+            return;
+        }
+
+        CheckNowButton.IsEnabled = false;
+        UpdateCheckStatusText.Text = "Checking…";
+        await _viewModel.CheckForUpdatesAsync(force: true);
+        UpdateCheckStatusText.Text = _viewModel.UpdateCheckStatus;
+        CheckNowButton.IsEnabled = true;
+    }
 
     private void SignalLossSwitch_Toggled(object sender, RoutedEventArgs e) =>
         SignalLossBox.IsEnabled = SignalLossSwitch.IsOn;

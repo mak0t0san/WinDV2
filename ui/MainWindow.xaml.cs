@@ -407,7 +407,7 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
 
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        SettingsPanel.Load(_settings);
+        SettingsPanel.Load(_settings, ViewModel);
         SetSettingsVisible(true);
     }
 

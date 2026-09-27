@@ -113,9 +113,14 @@
                     <StackPanel Spacing="4">
                         <ToggleSwitch x:Name="UpdateCheckSwitch" Header="Tell me when a new version is out"
                                       OnContent="On" OffContent="Off" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="CheckNowButton" Content="Check Now" Click="CheckNowButton_Click" />
+                            <TextBlock x:Name="UpdateCheckStatusText" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
                         <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                   Text="At most once a day, WinDV asks GitHub for the number of its latest version. Nothing about you or your videos is sent, and nothing is downloaded or installed without you." />
+                                   Text="At most once a day, WinDV asks GitHub for the number of its latest version. Nothing about you or your videos is sent, and nothing is downloaded or installed unless you click Update Now." />
                     </StackPanel>
                 </Border>
             </StackPanel>

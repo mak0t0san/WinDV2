@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Dispatching;
@@ -57,6 +58,8 @@ public sealed partial class MainViewModel : ObservableObject
         ErrorSeverity = InfoBarSeverity.Error;
         UpdateTitle = "";
         UpdateUri = new Uri(Views.AboutDialog.ProjectUrl);
+        UpdateCheckStatus = "";
+        IsInstalledCopy = InstallInfo.IsInstalledCopy();
 
         _dispatcher = dispatcher;
         _timer = dispatcher.CreateTimer();
@@ -153,6 +156,16 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial string UpdateTitle { get; set; }
     [ObservableProperty] public partial Uri UpdateUri { get; set; }
     [ObservableProperty] public partial bool HasUpdate { get; set; }
+
+    /// <summary>Result text for the Settings page's "Check Now" button.</summary>
+    [ObservableProperty] public partial string UpdateCheckStatus { get; set; }
+
+    /// <summary>Whether "Update Now" can offer to download and run the installer itself
+    /// (the portable zip has nothing to run it on top of).</summary>
+    public bool IsInstalledCopy { get; }
+
+    [ObservableProperty] public partial bool IsUpdating { get; set; }
+    [ObservableProperty] public partial string UpdateInstallError { get; set; } = "";
 
     public bool IsCaptureTool => SelectedTool == Tool.Capture;
     public bool IsRecordTool => SelectedTool == Tool.Record;
@@ -309,11 +322,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>
     /// Shows a notice when GitHub has a newer release. The last answer is kept, so
-    /// a known update shows straight away; GitHub itself is asked at most once a day.
+    /// a known update shows straight away; GitHub itself is asked at most once a day,
+    /// unless <paramref name="force"/> skips both that throttle and the enabled setting
+    /// (the Settings page's "Check Now" button), in which case <see cref="UpdateCheckStatus"/>
+    /// is also filled in with the outcome.
     /// </summary>
-    public async Task CheckForUpdatesAsync()
+    public async Task CheckForUpdatesAsync(bool force = false)
     {
-        if (!_settings.CheckForUpdates)
+        if (!force && !_settings.CheckForUpdates)
         {
             return;
         }
@@ -321,19 +337,31 @@ public sealed partial class MainViewModel : ObservableObject
         ShowKnownUpdate();
 
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if (now - _settings.LastUpdateCheck is >= 0 and < UpdateCheckIntervalSeconds)
+        if (!force && now - _settings.LastUpdateCheck is >= 0 and < UpdateCheckIntervalSeconds)
         {
             return;
         }
 
-        string? latest = await UpdateChecker.GetLatestTagAsync();
-        if (latest is null)
+        UpdateCheckResult result = await UpdateChecker.GetLatestReleaseAsync();
+        if (result.Outcome == UpdateCheckOutcome.CheckFailed)
         {
+            if (force)
+            {
+                UpdateCheckStatus = "Couldn't reach GitHub. Try again later.";
+            }
+
             return; // no answer: ask again next time
         }
 
         _settings.LastUpdateCheck = now;
-        _settings.LatestRelease = latest;
+        _settings.LatestRelease = result.Tag ?? "";
+        if (force)
+        {
+            UpdateCheckStatus = result.Outcome == UpdateCheckOutcome.Available
+                ? $"WinDV {UpdateChecker.NewerThanCurrent(result.Tag)?.ToString(3)} is available."
+                : "You're up to date.";
+        }
+
         ShowKnownUpdate();
     }
 
@@ -343,6 +371,39 @@ public sealed partial class MainViewModel : ObservableObject
         HasUpdate = false;
         _settings.DismissedRelease = _settings.LatestRelease;
     }
+
+    [RelayCommand(CanExecute = nameof(CanInstallUpdate))]
+    private async Task InstallUpdateAsync()
+    {
+        IsUpdating = true;
+        UpdateInstallError = "";
+        try
+        {
+            UpdateCheckResult result = await UpdateChecker.GetLatestReleaseAsync();
+            UpdateAsset? asset = result.Tag is not null
+                ? UpdateChecker.FindInstallerAsset(result.Assets, result.Tag)
+                : null;
+            if (result.Outcome != UpdateCheckOutcome.Available || asset is null)
+            {
+                UpdateInstallError = "Couldn't find a matching update to download. Use the link below instead.";
+                return;
+            }
+
+            string installerPath = await UpdateInstaller.DownloadAsync(asset.Url);
+            UpdateInstaller.LaunchInstaller(installerPath);
+            CloseRequested?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException or Win32Exception)
+        {
+            UpdateInstallError = "Couldn't download or run the update. Use the link below instead.";
+        }
+        finally
+        {
+            IsUpdating = false;
+        }
+    }
+
+    private bool CanInstallUpdate() => HasUpdate && IsInstalledCopy && !IsUpdating;
 
     private void ShowKnownUpdate()
     {
