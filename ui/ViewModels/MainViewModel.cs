@@ -155,7 +155,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>A newer WinDV is out: "WinDV 2.2.3 is available".</summary>
     [ObservableProperty] public partial string UpdateTitle { get; set; }
     [ObservableProperty] public partial Uri UpdateUri { get; set; }
-    [ObservableProperty] public partial bool HasUpdate { get; set; }
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallUpdateCommand))]
+    public partial bool HasUpdate { get; set; }
 
     /// <summary>Result text for the Settings page's "Check Now" button.</summary>
     [ObservableProperty] public partial string UpdateCheckStatus { get; set; }
@@ -164,7 +166,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// (the portable zip has nothing to run it on top of).</summary>
     public bool IsInstalledCopy { get; }
 
-    [ObservableProperty] public partial bool IsUpdating { get; set; }
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallUpdateCommand))]
+    public partial bool IsUpdating { get; set; }
     [ObservableProperty] public partial string UpdateInstallError { get; set; } = "";
 
     public bool IsCaptureTool => SelectedTool == Tool.Capture;

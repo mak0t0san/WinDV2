@@ -20,13 +20,29 @@ public static class InstallInfo
     /// </summary>
     public static bool IsInstalledCopy()
     {
-        using RegistryKey? user = Registry.CurrentUser.OpenSubKey(UninstallKeyPath);
-        if (user is not null)
+        return RunsFromInstallLocation(Registry.CurrentUser) || RunsFromInstallLocation(Registry.LocalMachine);
+    }
+
+    // The entry only proves WinDV is installed somewhere: a portable copy on the same
+    // machine must not count, or "Update Now" would update the other copy instead.
+    private static bool RunsFromInstallLocation(RegistryKey hive)
+    {
+        using RegistryKey? key = hive.OpenSubKey(UninstallKeyPath);
+        if (key?.GetValue("InstallLocation") is not string location || location.Length == 0)
         {
-            return true;
+            return false;
         }
 
-        using RegistryKey? machine = Registry.LocalMachine.OpenSubKey(UninstallKeyPath);
-        return machine is not null;
+        try
+        {
+            return string.Equals(
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(location)),
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(AppContext.BaseDirectory)),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 }

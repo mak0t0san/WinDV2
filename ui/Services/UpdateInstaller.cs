@@ -21,18 +21,24 @@ public static class UpdateInstaller
 
         // Redirects are followed by hand so every hop can be checked against the allow-list.
         using var handler = new HttpClientHandler { AllowAutoRedirect = false };
-        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(5) };
+        using var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
         http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("WinDV", UpdateChecker.CurrentVersion.ToString(3)));
 
         DeleteStaleDownloads();
+        // HttpClient.Timeout stops applying once the headers arrive, so one token covers
+        // the whole download, including the body.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(5));
+        CancellationToken token = timeout.Token;
+
         string path = Path.Combine(Path.GetTempPath(), $"WinDV-Update-{Guid.NewGuid():N}.exe");
         try
         {
-            using HttpResponseMessage response = await GetFollowingRedirectsAsync(http, assetUrl, cancellationToken);
-            await using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using HttpResponseMessage response = await GetFollowingRedirectsAsync(http, assetUrl, token);
+            await using Stream source = await response.Content.ReadAsStreamAsync(token);
             await using FileStream destination = File.Create(path);
-            await source.CopyToAsync(destination, cancellationToken);
+            await source.CopyToAsync(destination, token);
             return path;
         }
         catch
