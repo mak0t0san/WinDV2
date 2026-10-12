@@ -41,7 +41,8 @@ TEST_CASE("Empty format gives an empty string")
 TEST_CASE("Invalid formats are rejected instead of reaching wcsftime")
 {
 	// Each of these makes the UCRT invoke the invalid parameter handler.
-	for (const wchar_t* format : {L"%", L"abc%", L"%Q", L"%y-%", L"%E", L"%Ed", L"%O", L"%OY", L"%#", L"%#Q", L"%k"}) {
+	for (const wchar_t* format : {L"%", L"abc%", L"%Q", L"%y-%", L"%E", L"%Ed", L"%O", L"%OY", L"%#", L"%#Q", L"%k",
+	                              L"%#%", L"%#a", L"%#b", L"%#p", L"%#E"}) {
 		CAPTURE(std::wstring(format));
 		CHECK_FALSE(IsValidTimeFormat(format));
 		CHECK(FormatTime(format, 0).empty());

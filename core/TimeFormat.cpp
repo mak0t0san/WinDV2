@@ -12,6 +12,9 @@ namespace {
 constexpr std::wstring_view kConversions = L"aAbBcCdDeFgGhHIjmMnprRStTuUVwWxXyYzZ%";
 constexpr std::wstring_view kEModified = L"cCxXyY";
 constexpr std::wstring_view kOModified = L"deHImMSuUVwWy";
+// Microsoft extension: valid only for conversions where the UCRT supports the alternate form.
+// Specifiers like %#, %#a, %#A, %#b, %#B, %#p, %#% trigger the invalid parameter handler.
+constexpr std::wstring_view kHashModified = L"cCdDeFgGhHIjmMrRStTuUVwWxXyYzZ";
 
 bool Contains(std::wstring_view set, wchar_t c)
 {
@@ -32,7 +35,8 @@ bool IsValidTimeFormat(std::wstring_view format)
 
 		std::wstring_view allowed = kConversions;
 		switch (format[i]) {
-		case L'#': // Microsoft extension, accepted in front of any conversion
+		case L'#': // Microsoft extension, accepted in front of supported conversions
+			allowed = kHashModified;
 			break;
 		case L'E':
 			allowed = kEModified;

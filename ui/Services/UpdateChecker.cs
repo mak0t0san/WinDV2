@@ -75,7 +75,8 @@ public static class UpdateChecker
                         nameElement.GetString() is string name &&
                         asset.TryGetProperty("browser_download_url", out JsonElement urlElement) &&
                         urlElement.ValueKind == JsonValueKind.String &&
-                        Uri.TryCreate(urlElement.GetString(), UriKind.Absolute, out Uri? url))
+                        Uri.TryCreate(urlElement.GetString(), UriKind.Absolute, out Uri? url) &&
+                        IsValidAssetUrl(url))
                     {
                         assets.Add(new UpdateAsset(name, url));
                     }
@@ -92,6 +93,15 @@ public static class UpdateChecker
             return UpdateCheckResult.Failed; // offline, rate-limited, or GitHub is down: try again next time
         }
     }
+
+    /// <summary>Ensures the download URL is HTTPS and points to trusted GitHub endpoints.</summary>
+    public static bool IsValidAssetUrl(Uri? url) =>
+        url is not null &&
+        url.Scheme == Uri.UriSchemeHttps &&
+        (string.Equals(url.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
+         url.Host.EndsWith(".github.com", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(url.Host, "githubusercontent.com", StringComparison.OrdinalIgnoreCase) ||
+         url.Host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>"v2.2.3" -> 2.2.3. A pre-release suffix ("-beta", "+abc") is ignored.</summary>
     public static bool TryParseVersion(string? text, [NotNullWhen(true)] out Version? version)

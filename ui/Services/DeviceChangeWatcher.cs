@@ -23,6 +23,7 @@ public sealed unsafe partial class DeviceChangeWatcher : IDisposable
     private readonly DispatcherQueue _dispatcher;
     private readonly List<nint> _registrations = [];
     private GCHandle _self;
+    private bool _disposed;
 
     /// <summary>Call on the UI thread; <see cref="Changed"/> is raised there.</summary>
     public DeviceChangeWatcher(DispatcherQueue dispatcher)
@@ -50,10 +51,21 @@ public sealed unsafe partial class DeviceChangeWatcher : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
         // Waits for callbacks in progress, so the handle is safe to free afterwards.
         foreach (nint handle in _registrations)
         {
-            UnregisterNotification(handle);
+            uint status = UnregisterNotification(handle);
+            if (status != 0)
+            {
+                System.Diagnostics.Trace.WriteLine($"CM_Unregister_Notification returned error: {status}");
+            }
         }
 
         _registrations.Clear();
@@ -68,9 +80,16 @@ public sealed unsafe partial class DeviceChangeWatcher : IDisposable
     {
         // A thread-pool thread: hand over to the UI thread and return at once.
         if (action is CmNotifyActionDeviceInterfaceArrival or CmNotifyActionDeviceInterfaceRemoval &&
-            GCHandle.FromIntPtr(context).Target is DeviceChangeWatcher watcher)
+            GCHandle.FromIntPtr(context).Target is DeviceChangeWatcher watcher &&
+            !watcher._disposed)
         {
-            watcher._dispatcher.TryEnqueue(() => watcher.Changed?.Invoke(watcher, EventArgs.Empty));
+            watcher._dispatcher.TryEnqueue(() =>
+            {
+                if (!watcher._disposed)
+                {
+                    watcher.Changed?.Invoke(watcher, EventArgs.Empty);
+                }
+            });
         }
         return 0; // ERROR_SUCCESS
     }

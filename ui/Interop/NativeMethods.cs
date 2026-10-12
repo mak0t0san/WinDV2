@@ -197,6 +197,11 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvStdcall)])]
     public static partial int FormatNow(string format, char* buffer, int length);
 
+    [LibraryImport("kernel32.dll", EntryPoint = "GetDiskFreeSpaceExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetDiskFreeSpaceEx(string directoryName, out ulong freeBytesAvailableToCaller,
+        out ulong totalNumberOfBytes, out ulong totalNumberOfFreeBytes);
+
     /// <summary>Calls a native "fill this buffer" function, growing the buffer until it fits.</summary>
     public static string ReadString(Func<nint, int, int> fill, int initialLength = 512)
     {

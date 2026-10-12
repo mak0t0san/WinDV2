@@ -56,6 +56,9 @@ EngineThread::~EngineThread()
 
 void EngineThread::Post(std::function<void()> task)
 {
+	if (m_thread.get_stop_token().stop_requested()) {
+		return;
+	}
 	{
 		std::scoped_lock lock(m_mutex);
 		m_tasks.push_back(std::move(task));
@@ -65,7 +68,7 @@ void EngineThread::Post(std::function<void()> task)
 
 void EngineThread::Invoke(const std::function<void()>& task)
 {
-	if (IsCurrent()) {
+	if (IsCurrent() || m_thread.get_stop_token().stop_requested()) {
 		task();
 		return;
 	}

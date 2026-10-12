@@ -377,6 +377,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         IsUpdating = true;
         UpdateInstallError = "";
+        string? installerPath = null;
         try
         {
             UpdateCheckResult result = await UpdateChecker.GetLatestReleaseAsync();
@@ -389,12 +390,19 @@ public sealed partial class MainViewModel : ObservableObject
                 return;
             }
 
-            string installerPath = await UpdateInstaller.DownloadAsync(asset.Url);
+            installerPath = await UpdateInstaller.DownloadAsync(asset.Url);
             UpdateInstaller.LaunchInstaller(installerPath);
             CloseRequested?.Invoke(this, EventArgs.Empty);
         }
-        catch (Exception e) when (e is HttpRequestException or IOException or Win32Exception)
+        catch (Win32Exception e) when (e.NativeErrorCode == 1223) // ERROR_CANCELLED (user clicked "No" on UAC)
         {
+            UpdateInstaller.TryDeleteFile(installerPath);
+            // The user intentionally cancelled elevation; don't report an error.
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException or Win32Exception or ArgumentException
+                                      or OperationCanceledException)
+        {
+            UpdateInstaller.TryDeleteFile(installerPath);
             UpdateInstallError = "Couldn't download or run the update. Use the link below instead.";
         }
         finally
@@ -939,19 +947,24 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             string full = Path.GetFullPath(fileBase.Length > 0 ? fileBase : ".");
-            string? root = Path.GetPathRoot(full);
-            if (string.IsNullOrEmpty(root))
+            string? dir = Path.GetDirectoryName(full) ?? full;
+            // The capture folder may not exist yet; ask about the nearest one that does.
+            while (dir is not null && !Directory.Exists(dir))
             {
-                return null;
+                dir = Path.GetDirectoryName(dir);
             }
 
-            var drive = new DriveInfo(root);
-            return drive.IsReady ? drive.AvailableFreeSpace : null;
+            if (dir is not null && NativeMethods.GetDiskFreeSpaceEx(dir, out ulong freeBytes, out _, out _))
+            {
+                return (long)Math.Min(freeBytes, (ulong)long.MaxValue);
+            }
+
+            return null;
         }
         catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException
                                       or NotSupportedException)
         {
-            return null; // a network path or a half-typed name: just don't show it
+            return null; // an unresolvable path or a half-typed name: just don't show it
         }
     }
 

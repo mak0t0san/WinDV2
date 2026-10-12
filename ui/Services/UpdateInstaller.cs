@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Headers;
 
 namespace WinDV.Services;
@@ -13,15 +14,113 @@ public static class UpdateInstaller
     /// on any network or disk failure; the caller decides how to report that.</summary>
     public static async Task<string> DownloadAsync(Uri assetUrl, CancellationToken cancellationToken = default)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        if (!UpdateChecker.IsValidAssetUrl(assetUrl))
+        {
+            throw new ArgumentException("Untrusted or invalid update URL.", nameof(assetUrl));
+        }
+
+        // Redirects are followed by hand so every hop can be checked against the allow-list.
+        using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(5) };
         http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("WinDV", UpdateChecker.CurrentVersion.ToString(3)));
 
+        DeleteStaleDownloads();
         string path = Path.Combine(Path.GetTempPath(), $"WinDV-Update-{Guid.NewGuid():N}.exe");
-        await using Stream source = await http.GetStreamAsync(assetUrl, cancellationToken);
-        await using FileStream destination = File.Create(path);
-        await source.CopyToAsync(destination, cancellationToken);
-        return path;
+        try
+        {
+            using HttpResponseMessage response = await GetFollowingRedirectsAsync(http, assetUrl, cancellationToken);
+            await using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken);
+            await using FileStream destination = File.Create(path);
+            await source.CopyToAsync(destination, cancellationToken);
+            return path;
+        }
+        catch
+        {
+            TryDeleteFile(path);
+            throw;
+        }
+    }
+
+    private const int MaxRedirects = 5;
+
+    // A launched installer can't delete itself while it runs, so earlier attempts'
+    // files are cleared at the start of the next download (locked ones are skipped).
+    private static void DeleteStaleDownloads()
+    {
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(Path.GetTempPath(), "WinDV-Update-*.exe"))
+            {
+                TryDeleteFile(file);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Best-effort cleanup
+        }
+    }
+
+    private static async Task<HttpResponseMessage> GetFollowingRedirectsAsync(
+        HttpClient http, Uri url, CancellationToken cancellationToken)
+    {
+        for (int hop = 0; hop <= MaxRedirects; hop++)
+        {
+            HttpResponseMessage response = await http.GetAsync(
+                url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (!response.StatusCode.IsRedirect())
+            {
+                try
+                {
+                    return response.EnsureSuccessStatusCode();
+                }
+                catch
+                {
+                    response.Dispose();
+                    throw;
+                }
+            }
+
+            Uri? location = response.Headers.Location;
+            response.Dispose();
+            if (location is null)
+            {
+                throw new HttpRequestException("Redirect without a location.");
+            }
+
+            url = location.IsAbsoluteUri ? location : new Uri(url, location);
+            if (!UpdateChecker.IsValidAssetUrl(url))
+            {
+                throw new HttpRequestException("Update download redirected to an untrusted URL.");
+            }
+        }
+
+        throw new HttpRequestException("Too many redirects.");
+    }
+
+    private static bool IsRedirect(this HttpStatusCode code) =>
+        code is HttpStatusCode.MovedPermanently or HttpStatusCode.Found or HttpStatusCode.SeeOther
+            or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
+
+    /// <summary>Deletes a temporary file safely, ignoring any errors.</summary>
+    public static void TryDeleteFile(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup
+        }
     }
 
     /// <summary>
