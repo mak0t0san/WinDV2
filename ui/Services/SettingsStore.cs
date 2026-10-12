@@ -103,7 +103,7 @@ public sealed class SettingsStore
         settings.RecordPreview = GetInt(record, "Preview", 1) > 0;
 
         settings.CheckForUpdates = GetInt(updates, "CheckForUpdates", 1) > 0;
-        settings.LastUpdateCheck = updates?.GetValue("LastCheck") is long last ? last : 0;
+        settings.LastUpdateCheck = GetLong(updates, "LastCheck", 0);
         settings.LatestRelease = GetString(updates, "LatestRelease", "");
         settings.DismissedRelease = GetString(updates, "DismissedRelease", "");
         return settings;
@@ -178,6 +178,15 @@ public sealed class SettingsStore
         {
             int i => i,
             string s when int.TryParse(s, out int parsed) => parsed,
+            _ => fallback,
+        };
+
+    private static long GetLong(RegistryKey? key, string name, long fallback) =>
+        key?.GetValue(name) switch
+        {
+            long l => l,
+            int i => i,
+            string s when long.TryParse(s, out long parsed) => parsed,
             _ => fallback,
         };
 

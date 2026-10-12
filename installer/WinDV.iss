@@ -83,7 +83,9 @@ Name: "{autoprograms}\WinDV 2"; Filename: "{app}\WinDV.exe"
 Name: "{autodesktop}\WinDV 2"; Filename: "{app}\WinDV.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\WinDV.exe"; Description: "{cm:LaunchProgram,WinDV 2}"; Flags: nowait postinstall skipifsilent
+; No skipifsilent: the self-update flow in ui/Services/UpdateInstaller.cs runs this
+; installer silently and relies on it to relaunch WinDV once done.
+Filename: "{app}\WinDV.exe"; Description: "{cm:LaunchProgram,WinDV 2}"; Flags: nowait postinstall
 
 [Code]
 function IsDotNetRuntimeInstall: Boolean;

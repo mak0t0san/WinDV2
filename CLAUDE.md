@@ -150,10 +150,15 @@ If a VS install is needed: `vs_installer.exe ... --passive` fails with **exit co
   a time; on failure it resets the pipeline and shows the first error (as the retired
   MFC app's `Guarded` did). Use `[ObservableProperty]` on **partial properties**, not fields:
   field-based ones trigger an AOT/WinRT warning, which is an error under
-  `TreatWarningsAsErrors`. `Services/UpdateChecker` is the app's only network access:
-  at most once a day it reads the latest release's `tag_name` from the GitHub API
-  (`JsonDocument`, since reflection-based JSON doesn't work under AOT). Its state lives
-  in the `Updates` registry subkey, which only the WinUI app uses.
+  `TreatWarningsAsErrors`. `Services/UpdateChecker` is the app's only *unprompted* network
+  access: at most once a day (or on demand, from Settings' "Check Now") it reads the
+  latest release's tag and asset list from the GitHub API (`JsonDocument`, since
+  reflection-based JSON doesn't work under AOT). Its state lives in the `Updates`
+  registry subkey, which only the WinUI app uses. Clicking "Update Now" on the resulting
+  banner is a second, explicitly user-initiated network path: `Services/UpdateInstaller`
+  downloads the matching `WinDV-<version>-<arch>-Setup.exe` and runs it silently via
+  `Services/InstallInfo.IsInstalledCopy()` (only offered for installed copies, never the
+  portable zip), then the app exits so the installer can replace files.
 
 Filters derive from `CBaseFilter`, which inherits `IUnknown` twice, so they cannot go
 in a `CComPtr<CMyFilter>`. The pattern is a raw typed pointer plus a

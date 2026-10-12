@@ -33,4 +33,23 @@ public static class Ui
     public static string VolumeGlyph(bool muted) => muted ? "" : "";
 
     public static string MuteButtonName(bool muted) => muted ? "Unmute" : "Mute";
+
+    public static string UpdateNowLabel(bool isUpdating) => isUpdating ? "Downloading…" : "Update Now";
+
+    public static string UpdateBarMessage(bool isInstalledCopy, bool isUpdating, string installError)
+    {
+        if (installError.Length > 0)
+        {
+            return installError;
+        }
+
+        if (isUpdating)
+        {
+            return "Downloading the update…";
+        }
+
+        return isInstalledCopy
+            ? "WinDV can download and install it for you, or get it from the release page yourself."
+            : "Get it from the release page. Your settings carry over.";
+    }
 }
